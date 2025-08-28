@@ -12,7 +12,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create trigger for match updates
+-- Create trigger for match update
 CREATE TRIGGER match_update_trigger
   AFTER UPDATE ON matches
   FOR EACH ROW
