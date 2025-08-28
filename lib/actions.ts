@@ -3,6 +3,7 @@
 import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { getCallbackUrl, getDashboardUrl } from "./config"
 
 // Sign in action
 export async function signIn(prevState: any, formData: FormData) {
@@ -43,8 +44,7 @@ export async function signInWithGoogle() {
   const cookieStore = cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  const redirectUrl = `${baseUrl}/auth/callback`
+  const redirectUrl = getCallbackUrl()
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -88,9 +88,7 @@ export async function signUp(prevState: any, formData: FormData) {
       email: email.toString(),
       password: password.toString(),
       options: {
-        emailRedirectTo:
-          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-          `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+        emailRedirectTo: getDashboardUrl(),
         data: {
           username: username.toString(),
           display_name: displayName?.toString() || username.toString(),
@@ -115,5 +113,5 @@ export async function signOut() {
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   await supabase.auth.signOut()
-  redirect("/auth/login")
+  redirect(`${getCallbackUrl("/auth/login")}`)
 }
