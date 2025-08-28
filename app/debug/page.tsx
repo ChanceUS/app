@@ -1,46 +1,71 @@
-// app/debug/page.tsx
-'use client';
+"use client"
 
-import { useEffect, useState } from 'react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-
-type SessionT = Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'];
+import { createClient } from "@supabase/supabase-js"
+import { useEffect, useState } from "react"
 
 export default function DebugPage() {
-  const [sessionInfo, setSessionInfo] = useState<SessionT>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [envVars, setEnvVars] = useState<any>({})
+  const [supabaseStatus, setSupabaseStatus] = useState<string>("Testing...")
+  const [error, setError] = useState<string>("")
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    // Check environment variables
+    setEnvVars({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    })
+
+    // Test Supabase connection
+    const testSupabase = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        if (!cancelled) {
-          setSessionInfo(data.session);
-          // stash the token so you can use it from DevTools/curl
-          (window as any).__lastToken = data.session?.access_token ?? null;
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        
+        const { data, error } = await supabase.from('games').select('count').limit(1)
+        
+        if (error) {
+          setSupabaseStatus(`Error: ${error.message}`)
+          setError(error.message)
+        } else {
+          setSupabaseStatus("✅ Connected to Supabase successfully!")
         }
-      } catch (e: any) {
-        if (!cancelled) setErr(e?.message || String(e));
+      } catch (err: any) {
+        setSupabaseStatus(`❌ Connection failed: ${err.message}`)
+        setError(err.message)
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+
+    testSupabase()
+  }, [])
 
   return (
-    <main style={{ padding: 16, fontFamily: 'system-ui, sans-serif' }}>
-      <h3>Supabase Debug</h3>
-      <p><b>isSupabaseConfigured:</b> {String(isSupabaseConfigured)}</p>
-      <p><b>Session token present:</b> {sessionInfo ? 'yes' : 'no'}</p>
-      {sessionInfo && (
-        <>
-          <p><b>Access token (first 24 chars):</b> {sessionInfo.access_token.slice(0, 24)}…</p>
-          <p><b>User ID:</b> {sessionInfo.user.id}</p>
-          <p><b>Email:</b> {sessionInfo.user.email}</p>
-        </>
-      )}
-      {err && <p style={{ color: 'crimson' }}>Error: {err}</p>}
-    </main>
-  );
+    <div className="min-h-screen bg-black text-white p-8">
+      <h1 className="text-3xl font-bold mb-8">Supabase Debug Page</h1>
+      
+      <div className="space-y-6">
+        <div className="bg-gray-900 p-6 rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">Environment Variables</h2>
+          <div className="space-y-2">
+            <div><strong>Supabase URL:</strong> {envVars.supabaseUrl || "Not set"}</div>
+            <div><strong>Site URL:</strong> {envVars.siteUrl || "Not set"}</div>
+            <div><strong>Has Anon Key:</strong> {envVars.hasAnonKey ? "Yes" : "No"}</div>
+          </div>
+        </div>
+
+        <div className="bg-gray-900 p-6 rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">Supabase Connection</h2>
+          <div className="text-lg">{supabaseStatus}</div>
+          {error && <div className="text-red-400 mt-2">Error: {error}</div>}
+        </div>
+
+        <div className="bg-gray-900 p-6 rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">Current URL</h2>
+          <div className="break-all">{typeof window !== 'undefined' ? window.location.href : 'Server side'}</div>
+        </div>
+      </div>
+    </div>
+  )
 }
