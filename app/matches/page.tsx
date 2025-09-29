@@ -16,7 +16,7 @@ export default async function MatchesPage() {
   }
 
   // Get the user from the server
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser()
@@ -34,7 +34,7 @@ export default async function MatchesPage() {
   }
 
   // Get match history with detailed information
-  const { data: matches = [] } = await supabase
+  const { data: matches = [], error: matchesError } = await supabase
     .from("matches")
     .select(`
       id,
@@ -51,6 +51,22 @@ export default async function MatchesPage() {
     .or(`player1_id.eq.${authUser.id},player2_id.eq.${authUser.id}`)
     .order("created_at", { ascending: false })
     .limit(50)
+
+  // Debug: Log any errors and the matches data
+  if (matchesError) {
+    console.error('❌ Error fetching matches:', matchesError)
+  }
+  
+  console.log('🔍 Matches page - fetched matches:', matches?.length || 0)
+  if (matches && matches.length > 0) {
+    console.log('🔍 First match sample:', {
+      id: matches[0].id,
+      status: matches[0].status,
+      player1: matches[0].player1,
+      player2: matches[0].player2,
+      games: matches[0].games
+    })
+  }
 
   // Calculate additional stats
   const completedMatches = matches.filter((m) => m.status === "completed")

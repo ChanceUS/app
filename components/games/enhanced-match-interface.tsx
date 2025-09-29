@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useMatchRealtime } from '@/hooks/use-match-realtime'
 import { supabase } from '@/lib/supabase/client'
+import { completeMatch } from '@/lib/complete-match-action'
 import type { Match, User } from '@/lib/supabase/client'
 import ConnectFour from './connect-four'
 import MathBlitz from './math-blitz'
+import MultiplayerMathBlitz from './multiplayer-math-blitz'
 import TriviaChallenge from './trivia-challenge'
 import { 
   Users, 
@@ -29,7 +31,7 @@ interface EnhancedMatchInterfaceProps {
 }
 
 interface GameState {
-  status: 'waiting' | 'starting' | 'playing' | 'completed'
+  status: 'waiting' | 'countdown' | 'starting' | 'playing' | 'completed'
   currentPlayer: string | null
   gameData: any
   startTime?: Date
@@ -47,29 +49,63 @@ export default function EnhancedMatchInterface({
     gameData: match.game_data || {}
   })
   const [opponent, setOpponent] = useState<User | null>(null)
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null)
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const [isMyTurn, setIsMyTurn] = useState(false)
+  const [showJoinNotification, setShowJoinNotification] = useState(false)
+  const [localMatch, setLocalMatch] = useState(match) // Local copy of match data for real-time updates
+  
+  // Debug: Log when opponent state changes
+  useEffect(() => {
+    console.log('👤 Opponent state updated:', opponent)
+  }, [opponent])
+  
+  // Debug: Log when localMatch changes
+  useEffect(() => {
+    console.log('🔄 Local match state updated:', localMatch)
+  }, [localMatch])
 
   const isPlayer1 = match.player1_id === currentUser.id
   const isPlayer2 = match.player2_id === currentUser.id
   const isInMatch = isPlayer1 || isPlayer2
 
-  // Real-time match updates
-  const { 
-    match: realtimeMatch, 
-    isConnected, 
-    error, 
-    updateMatch, 
-    addMatchHistory 
-  } = useMatchRealtime({
-    matchId: match.id,
-    onMatchUpdate: handleMatchUpdate,
-    onGameDataUpdate: handleGameDataUpdate
-  })
+  // Temporarily disable real-time updates to fix connection issues
+  // const { 
+  //   match: realtimeMatch, 
+  //   isConnected, 
+  //   error, 
+  //   updateMatch, 
+  //   addMatchHistory 
+  // } = useMatchRealtime({
+  //   matchId: match.id,
+  //   onMatchUpdate: handleMatchUpdate,
+  //   onGameDataUpdate: handleGameDataUpdate
+  // })
+  
+  // Use mock values for now
+  const isConnected = true
+  const error = null
+  const updateMatch = async (updates: any) => console.log('Match update:', updates)
+  const addMatchHistory = async (type: string, data: any) => console.log('Match history:', type, data)
 
-  // Fetch opponent data
+  // Initialize game state from database and fetch opponent data
   useEffect(() => {
-    const fetchOpponent = async () => {
+    const initializeGameState = async () => {
+      // Check if match is ready to play (both players present)
+      if ((match.status === 'in_progress' || match.status === 'waiting') && match.player2_id) {
+        console.log('🎮 Match ready to play, initializing game state...', { status: match.status, player2_id: match.player2_id })
+        setGameState(prev => ({
+          ...prev,
+          status: 'playing',
+          startTime: match.started_at ? new Date(match.started_at) : new Date(),
+          currentPlayer: match.player1_id
+        }))
+        setIsMyTurn(match.player1_id === currentUser.id)
+        console.log('✅ Game state initialized from database')
+      }
+
+      // Fetch opponent data
       const opponentId = isPlayer1 ? match.player2_id : match.player1_id
       if (!opponentId) return
 
@@ -82,8 +118,98 @@ export default function EnhancedMatchInterface({
       if (data) setOpponent(data)
     }
 
-    fetchOpponent()
-  }, [match, isPlayer1])
+    initializeGameState()
+
+    // Set up real-time listener for match updates
+    const matchSubscription = supabase
+      .channel(`match:${match.id}`)
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'matches',
+          filter: `id=eq.${match.id}`
+        }, 
+        (payload) => {
+          console.log('🔄 Match updated in real-time:', payload.new)
+          const updatedMatch = payload.new as Match
+          
+          // Check if player2 joined
+          if (updatedMatch.player2_id && !localMatch.player2_id) {
+            console.log('🎉 Player 2 joined the match!')
+            
+            // Update the local match state to reflect the new player2_id
+            // This ensures the UI updates immediately
+            const updatedMatchData = {
+              ...localMatch,
+              player2_id: updatedMatch.player2_id,
+              status: updatedMatch.status
+            }
+            setLocalMatch(updatedMatchData)
+            
+            // Fetch the new player's data
+            supabase
+              .from('users')
+              .select('*')
+              .eq('id', updatedMatch.player2_id)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  setOpponent(data)
+                  console.log('✅ Opponent data updated:', data.display_name)
+                  
+                  // Show join notification
+                  setShowJoinNotification(true)
+                  setTimeout(() => setShowJoinNotification(false), 5000) // Hide after 5 seconds
+                  
+                  // Force a re-render by updating some state
+                  setGameState(prev => ({
+                    ...prev,
+                    // Trigger re-render when opponent joins
+                    lastUpdate: Date.now()
+                  }))
+                }
+              })
+          }
+          
+          // Check if match status changed
+          if (updatedMatch.status !== match.status) {
+            console.log(`🔄 Match status changed: ${match.status} → ${updatedMatch.status}`)
+            if (updatedMatch.status === 'in_progress') {
+              handleStatusChange('in_progress')
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    // Set up real-time listener for match history updates
+    const historySubscription = supabase
+      .channel(`match_history:${match.id}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'match_history',
+          filter: `match_id=eq.${match.id}`
+        }, 
+        (payload) => {
+          console.log('📜 Match history updated:', payload.new)
+          const historyEntry = payload.new as any
+          
+          if (historyEntry.action_type === 'player_joined') {
+            console.log('🎉 Player joined event detected!')
+            // The match update listener will handle the actual player data update
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      matchSubscription.unsubscribe()
+      historySubscription.unsubscribe()
+    }
+  }, [localMatch, isPlayer1, currentUser.id, supabase])
 
   // Handle real-time match updates
   function handleMatchUpdate(updatedMatch: Match) {
@@ -129,42 +255,159 @@ export default function EnhancedMatchInterface({
     }
   }
 
-  // Start the match
-  const startMatch = useCallback(async () => {
+  // Start the countdown
+  const startCountdown = useCallback(() => {
     if (!isPlayer1) return // Only player 1 can start
 
-    try {
-      await updateMatch({
-        status: 'in_progress',
-        started_at: new Date().toISOString()
+    console.log('🎮 Starting countdown...')
+    
+    // Set countdown state
+    setGameState(prev => ({
+      ...prev,
+      status: 'countdown'
+    }))
+    
+    // Start countdown from 3
+    setCountdown(3)
+    console.log('🔢 Countdown set to 3')
+    
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        console.log('⏰ Countdown tick:', prev)
+        if (prev === null || prev <= 1) {
+          // Countdown finished, start the actual match
+          console.log('🏁 Countdown finished, starting match!')
+          clearInterval(interval)
+          setCountdownInterval(null)
+          startActualMatch()
+          return null
+        }
+        return prev - 1
       })
+    }, 1000)
+    
+    setCountdownInterval(interval)
+  }, [isPlayer1])
 
-      await addMatchHistory('match_started', {
-        started_by: currentUser.id,
-        timestamp: new Date().toISOString()
-      })
+  // Start the actual match (called after countdown)
+  const startActualMatch = useCallback(async () => {
+    try {
+      console.log('🎮 Starting actual match...')
+      console.log('👥 Players in match:', { player1: match.player1_id, player2: match.player2_id })
+      
+      // Small delay to ensure countdown UI is visible
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Update local state immediately
+      setGameState(prev => ({
+        ...prev,
+        status: 'playing',
+        startTime: new Date(),
+        currentPlayer: match.player1_id
+      }))
+      setIsMyTurn(true)
+      console.log('✅ Game state updated to playing')
+      
+      // Actually update the database
+      const { error: updateError } = await supabase
+        .from('matches')
+        .update({
+          status: 'in_progress',
+          started_at: new Date().toISOString()
+        })
+        .eq('id', match.id)
+      
+      if (updateError) {
+        console.error('Failed to update match in database:', updateError)
+      } else {
+        console.log('✅ Database updated successfully')
+      }
+      
+      // Add match history
+      const { error: historyError } = await supabase
+        .from('match_history')
+        .insert({
+          match_id: match.id,
+          user_id: currentUser.id,
+          action_type: 'match_started',
+          action_data: {
+            started_by: currentUser.id,
+            timestamp: new Date().toISOString()
+          }
+        })
+      
+      if (historyError) {
+        console.error('Failed to add match history:', historyError)
+      } else {
+        console.log('✅ Match history added successfully')
+      }
+      
     } catch (error) {
       console.error('Failed to start match:', error)
     }
-  }, [isPlayer1, updateMatch, addMatchHistory, currentUser.id])
+  }, [isPlayer1, currentUser.id, match.player1_id, match.id, supabase])
+
+  // Alias for backward compatibility
+  const startMatch = startCountdown
+
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval)
+      }
+    }
+  }, [countdownInterval])
 
   // Join the match
   const joinMatch = useCallback(async () => {
-    if (isInMatch || !match.player2_id) return
+    if (isInMatch || match.player2_id) return
 
     try {
-      await updateMatch({
-        player2_id: currentUser.id
-      })
-
-      await addMatchHistory('player_joined', {
-        player_id: currentUser.id,
-        timestamp: new Date().toISOString()
-      })
+      console.log('🎮 Player joining match...')
+      
+      // Update the match in the database
+      const { error: updateError } = await supabase
+        .from('matches')
+        .update({
+          player2_id: currentUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', match.id)
+      
+      if (updateError) {
+        console.error('Failed to join match:', updateError)
+        return
+      }
+      
+      console.log('✅ Player joined match successfully')
+      
+      // Add match history
+      const { error: historyError } = await supabase
+        .from('match_history')
+        .insert({
+          match_id: match.id,
+          user_id: currentUser.id,
+          action_type: 'player_joined',
+          action_data: {
+            player_id: currentUser.id,
+            timestamp: new Date().toISOString()
+          }
+        })
+      
+      if (historyError) {
+        console.error('Failed to add match history:', historyError)
+      } else {
+        console.log('✅ Match history added for player join')
+      }
+      
+      // Update local state to show player has joined
+      setOpponent(currentUser)
+      
     } catch (error) {
       console.error('Failed to join match:', error)
     }
-  }, [isInMatch, match.player2_id, updateMatch, addMatchHistory, currentUser.id])
+  }, [isInMatch, match.player2_id, match.id, currentUser.id, supabase])
 
   // Handle game move
   const handleGameMove = useCallback(async (moveData: any) => {
@@ -195,7 +438,7 @@ export default function EnhancedMatchInterface({
       setIsMyTurn(false)
       setGameState(prev => ({
         ...prev,
-        currentPlayer: prev.currentPlayer === match.player1_id ? match.player2_id : match.player1_id
+        currentPlayer: prev.currentPlayer === match.player1_id ? (match.player2_id || null) : match.player1_id
       }))
     } catch (error) {
       console.error('Failed to make move:', error)
@@ -206,7 +449,7 @@ export default function EnhancedMatchInterface({
   const handleGameComplete = useCallback(async (winner: 'player1' | 'player2' | 'draw') => {
     try {
       const winnerId = winner === 'draw' ? null : 
-        winner === 'player1' ? match.player1_id : match.player2_id
+        winner === 'player1' ? match.player1_id : (match.player2_id || null)
 
       await updateMatch({
         status: 'completed',
@@ -227,27 +470,60 @@ export default function EnhancedMatchInterface({
 
   // Render game component based on game type
   const renderGame = () => {
-    const gameProps = {
-      onGameEnd: handleGameComplete,
-      isActive: gameState.status === 'playing',
-      currentPlayer: gameState.currentPlayer === match.player1_id ? 'player1' : 'player2',
-      isMyTurn,
-      gameData: gameState.gameData,
-      onMove: handleGameMove
-    }
-
-    // Get game name from match
-    const gameName = match.game_id // You'll need to fetch the actual game name
-
-    switch (gameName) {
-      case 'connect-four':
-        return <ConnectFour {...gameProps} />
-      case 'math-blitz':
-        return <MathBlitz {...gameProps} />
-      case 'trivia-challenge':
-        return <TriviaChallenge {...gameProps} />
-      default:
-        return <div className="text-center text-gray-400">Unknown game type</div>
+    // Check if this is a multiplayer match (both players present) and game is playing
+    if (match.player2_id && gameState.status === 'playing') {
+      // Use multiplayer Math Blitz for head-to-head competition
+      return <MultiplayerMathBlitz
+        matchId={match.id}
+        currentUserId={currentUser.id}
+        player1Id={match.player1_id}
+        player2Id={match.player2_id}
+        onGameComplete={async (result) => {
+          console.log('🎮 Multiplayer game completed:', result)
+          // Handle game completion - update match with winner
+          const winnerId = result.winner === 'player1' ? match.player1_id : 
+                          result.winner === 'player2' ? match.player2_id : null
+          
+          console.log('🔄 Updating match status to completed via server action:', {
+            matchId: match.id,
+            winnerId,
+            result
+          })
+          
+          try {
+            const serverResult = await completeMatch(match.id, winnerId || null, result)
+            
+            if (serverResult.success) {
+              console.log('✅ Server action: Match completed successfully:', serverResult.data)
+              // Force a page refresh to update the UI
+              setTimeout(() => {
+                console.log('🔄 Forcing page refresh to update UI...')
+                window.location.href = '/games'
+              }, 1000)
+            } else {
+              console.error('❌ Server action: Failed to complete match:', serverResult.error)
+            }
+          } catch (error) {
+            console.error('❌ Server action: Unexpected error:', error)
+          }
+        }}
+      />
+    } else {
+      // Fallback to single-player Math Blitz
+      return <MathBlitz 
+        savedGameData={match.game_data}
+        onGameUpdate={(gameData) => {
+          // Save game progress to database
+          supabase
+            .from('matches')
+            .update({ game_data: gameData })
+            .eq('id', match.id)
+            .then(({ error }) => {
+              if (error) console.error('Failed to save game data:', error)
+              else console.log('✅ Game progress saved')
+            })
+        }}
+      />
     }
   }
 
@@ -285,7 +561,7 @@ export default function EnhancedMatchInterface({
         <div className="flex items-center justify-between">
           <CardTitle className="text-white flex items-center">
             <Users className="mr-2 h-5 w-5 text-orange-400" />
-            Match #{match.id.slice(0, 8)}
+            Match Status
           </CardTitle>
           <div className="flex items-center space-x-2">
             <Badge className={`${isConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -305,6 +581,17 @@ export default function EnhancedMatchInterface({
             {gameState.startTime && (
               <span>Started: {gameState.startTime.toLocaleTimeString()}</span>
             )}
+            {localMatch.status === 'waiting' && (
+              <span className="flex items-center space-x-1">
+                <Users className="h-4 w-4" />
+                <span>{localMatch.player2_id ? '2/2' : '1/2'} Players</span>
+                {localMatch.player2_id && (
+                  <Badge className="ml-2 bg-green-500/20 text-green-400 text-xs">
+                    Ready to Start
+                  </Badge>
+                )}
+              </span>
+            )}
           </div>
           {gameState.status === 'playing' && (
             <div className="flex items-center space-x-2">
@@ -316,6 +603,16 @@ export default function EnhancedMatchInterface({
       </CardHeader>
 
       <CardContent className="space-y-6">
+        {/* Join Notification */}
+        {showJoinNotification && (
+          <Alert className="bg-green-500/20 border-green-500/30 text-green-400">
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>
+              🎉 A player has joined the match! You can now start playing.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         {/* Player Information */}
         <div className="grid grid-cols-2 gap-4">
           <div className={`p-4 rounded-lg ${isPlayer1 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
@@ -331,7 +628,7 @@ export default function EnhancedMatchInterface({
             <div className="text-center">
               <div className="text-sm text-gray-400 mb-1">Player 2</div>
               <div className="text-white font-medium">
-                {isPlayer2 ? 'You' : (match.player2_id ? 'Joined' : 'Waiting...')}
+                {isPlayer2 ? 'You' : (localMatch.player2_id ? 'Joined' : 'Waiting...')}
               </div>
               {isPlayer2 && <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>}
             </div>
@@ -339,25 +636,73 @@ export default function EnhancedMatchInterface({
         </div>
 
         {/* Match Actions */}
-        {match.status === 'waiting' && (
+        {localMatch.status === 'waiting' && (
           <div className="text-center space-y-4">
             {!isInMatch ? (
-              <Button onClick={joinMatch} className="btn-primary">
-                Join Match
-              </Button>
-            ) : isPlayer1 && !match.player2_id ? (
-              <div className="text-gray-400">Waiting for opponent to join...</div>
+              <div className="space-y-3">
+                <div className="text-gray-400 text-sm">
+                  {localMatch.player2_id ? 'Match is full' : 'Join this match to play!'}
+                </div>
+                {!localMatch.player2_id && (
+                  <Button onClick={joinMatch} className="btn-primary">
+                    Join Match
+                  </Button>
+                )}
+              </div>
+            ) : isPlayer1 ? (
+              <div className="space-y-3">
+                <div className="text-gray-400 text-sm">
+                  {localMatch.player2_id ? 'Both players ready! You can start the match.' : 'Waiting for Player 2 to join...'}
+                </div>
+                {localMatch.player2_id && (
+                  <>
+                    {gameState.status === 'countdown' && countdown !== null ? (
+                      <div className="text-center">
+                        <div className="text-6xl font-bold text-orange-400 mb-4 animate-pulse">
+                          {countdown}
+                        </div>
+                        <div className="text-gray-400 text-lg">
+                          Get ready!
+                        </div>
+                      </div>
+                    ) : (
+                      <Button onClick={startMatch} className="btn-primary">
+                        <Play className="mr-2 h-4 w-4" />
+                        Start Match
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
             ) : (
-              <Button onClick={startMatch} disabled={!isPlayer1} className="btn-primary">
-                <Play className="mr-2 h-4 w-4" />
-                Start Match
-              </Button>
+              <div className="space-y-3">
+                <div className="text-gray-400 text-sm">
+                  {localMatch.player2_id ? 'Waiting for Player 1 to start the match...' : 'Waiting for Player 2 to join...'}
+                </div>
+                {gameState.status === 'countdown' && countdown !== null && (
+                  <div className="text-center">
+                    <div className="text-6xl font-bold text-orange-400 mb-4 animate-pulse">
+                      {countdown}
+                    </div>
+                    <div className="text-gray-400 text-lg">
+                      Get ready!
+                    </div>
+                  </div>
+                )}
+                {!localMatch.player2_id && (
+                  <div className="text-orange-400 text-sm">You joined! Waiting for another player...</div>
+                )}
+              </div>
             )}
           </div>
         )}
 
         {/* Game Interface */}
-        {gameState.status === 'playing' && renderGame()}
+        {gameState.status === 'playing' && (
+          <div>
+            {renderGame()}
+          </div>
+        )}
 
         {/* Match Complete */}
         {gameState.status === 'completed' && (

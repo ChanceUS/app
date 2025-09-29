@@ -3,6 +3,12 @@ import { redirect } from "next/navigation"
 import Header from "@/components/navigation/header"
 import GameCard from "@/components/games/game-card"
 import MatchList from "@/components/games/match-list"
+import MatchmakingRealtime from "@/components/matchmaking-realtime"
+import MyMatchmakingQueues from "@/components/my-matchmaking-queues"
+import CleanupHandler from "@/components/cleanup-handler"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { forceCompleteMatches } from "@/lib/force-complete-matches"
 
 export default async function GamesPage() {
   // If Supabase is not configured, show setup message
@@ -15,7 +21,7 @@ export default async function GamesPage() {
   }
 
   // Get the user from the server
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser()
@@ -32,10 +38,14 @@ export default async function GamesPage() {
     redirect("/auth/login")
   }
 
+  // Note: Cleanup is handled by the debug page and client-side actions
+  // to avoid revalidatePath issues during server-side rendering
+
   // Get all active games
   const { data: games = [] } = await supabase.from("games").select("*").eq("is_active", true).order("name")
 
-  // Get waiting matches with user info
+  // Get waiting matches with user info - show ALL waiting matches including user's own
+  // Exclude matches that have both players (they should be completed)
   const { data: waitingMatches = [] } = await supabase
     .from("matches")
     .select(
@@ -43,13 +53,208 @@ export default async function GamesPage() {
       id,
       bet_amount,
       created_at,
+      player1_id,
+      player2_id,
       games (name),
-      users!matches_player1_id_fkey (username, display_name, avatar_url)
+      player1:users!matches_player1_id_fkey (username, display_name, avatar_url)
     `,
     )
     .eq("status", "waiting")
+    .is("player2_id", null) // Only show matches waiting for a second player
     .order("created_at", { ascending: false })
     .limit(10)
+
+  // Debug: Get ALL waiting matches to see what exists
+  const { data: allWaitingMatches = [] } = await supabase
+    .from("matches")
+    .select(
+      `
+      id,
+      bet_amount,
+      created_at,
+      player1_id,
+      games (name),
+      player1:users!matches_player1_id_fkey (username, display_name, avatar_url)
+    `,
+    )
+    .eq("status", "waiting")
+    .is("player2_id", null)
+    .order("created_at", { ascending: false })
+
+  // Debug: Let's also check what matches exist in the database
+  const { data: allMatches = [] } = await supabase
+    .from("matches")
+    .select(`
+      id,
+      bet_amount,
+      created_at,
+      player1_id,
+      player2_id,
+      status,
+      games (name),
+      player1:users!matches_player1_id_fkey (username, display_name)
+    `)
+    .eq("status", "waiting")
+    .order("created_at", { ascending: false })
+
+  console.log("🔍 Debug - Open matches query:", {
+    currentUserId: authUser.id,
+    waitingMatchesCount: waitingMatches.length,
+    allMatchesCount: allMatches.length,
+    waitingMatches: waitingMatches.map(m => ({
+      id: m.id,
+      player1_id: m.player1_id,
+      player1_username: m.player1?.username,
+      bet_amount: m.bet_amount,
+      game: m.games?.name
+    })),
+    allMatches: allMatches.map(m => ({
+      id: m.id,
+      player1_id: m.player1_id,
+      player2_id: m.player2_id,
+      player1_username: m.player1?.username,
+      bet_amount: m.bet_amount,
+      game: m.games?.name,
+      status: m.status,
+      isOwnMatch: m.player1_id === authUser.id
+    }))
+  })
+
+  // Get active matchmaking queue entries that other players can join
+  const { data: matchmakingQueues = [] } = await supabase
+    .from("matchmaking_queue")
+    .select(
+      `
+      id,
+      bet_amount,
+      match_type,
+      expires_at,
+      created_at,
+      games (name),
+      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
+    `,
+    )
+    .eq("status", "waiting")
+    .neq("user_id", authUser.id) // Don't show user's own queue entries
+    .gt("expires_at", new Date().toISOString()) // Only show non-expired entries
+    .order("created_at", { ascending: false })
+    .limit(10)
+
+  // Get user's own matchmaking queues
+  const { data: myMatchmakingQueues = [] } = await supabase
+    .from("matchmaking_queue")
+    .select(
+      `
+      id,
+      bet_amount,
+      match_type,
+      expires_at,
+      created_at,
+      games (name)
+    `,
+    )
+    .eq("status", "waiting")
+    .eq("user_id", authUser.id) // Only show user's own queue entries
+    .gt("expires_at", new Date().toISOString()) // Only show non-expired entries
+    .order("created_at", { ascending: false })
+    .limit(5)
+
+
+  // Debug: Get ALL matches to see what's in the database
+  const { data: allMatchesDebug = [] } = await supabase
+    .from("matches")
+    .select(`
+      id,
+      status,
+      bet_amount,
+      created_at,
+      completed_at,
+      player1_id,
+      player2_id,
+      games (name)
+    `)
+    .order("created_at", { ascending: false })
+    .limit(20)
+
+  console.log('🔍 Debug - ALL matches in database:', {
+    totalMatches: allMatchesDebug.length,
+    matches: allMatchesDebug.map(m => ({ 
+      id: m.id, 
+      status: m.status, 
+      game: m.games?.name, 
+      bet: m.bet_amount, 
+      created: m.created_at,
+      completed: m.completed_at,
+      p1: m.player1_id,
+      p2: m.player2_id
+    }))
+  })
+
+  console.log('🔍 Debug - Available matches for joining:', {
+    totalWaiting: waitingMatches.length,
+    matches: waitingMatches.map(m => ({ id: m.id, game: m.games?.name, bet: m.bet_amount, creator: m.player1?.username }))
+  })
+
+  // Check if there are any matches that should be completed but aren't
+  const completedMatches = allMatchesDebug.filter(m => m.status === 'completed')
+  const waitingMatchesWithBothPlayers = allMatchesDebug.filter(m => 
+    m.status === 'waiting' && m.player1_id && m.player2_id
+  )
+
+  console.log('🔍 Debug - Match status analysis:', {
+    totalMatches: allMatchesDebug.length,
+    completedMatches: completedMatches.length,
+    waitingMatchesWithBothPlayers: waitingMatchesWithBothPlayers.length,
+    shouldBeCompleted: waitingMatchesWithBothPlayers.map(m => ({
+      id: m.id,
+      game: m.games?.name,
+      p1: m.player1_id,
+      p2: m.player2_id,
+      created: m.created_at
+    }))
+  })
+
+  // Force complete any matches that should be completed
+  if (waitingMatchesWithBothPlayers.length > 0) {
+    console.log('⚠️ Found matches that should be completed, force completing...')
+    await forceCompleteMatches()
+  }
+
+  console.log('🔍 Debug - Matchmaking queues:', {
+    totalQueues: matchmakingQueues.length,
+    queues: matchmakingQueues.map(q => ({ 
+      id: q.id, 
+      game: q.games?.name, 
+      bet: q.bet_amount, 
+      type: q.match_type,
+      user: q.users?.username,
+      expires: q.expires_at
+    }))
+  })
+
+
+  // Get user's own waiting matches
+  const { data: myWaitingMatches = [] } = await supabase
+    .from("matches")
+    .select(
+      `
+      id,
+      bet_amount,
+      created_at,
+      games (name),
+      player1:users!matches_player1_id_fkey (username, display_name, avatar_url)
+    `,
+    )
+    .eq("status", "waiting")
+    .eq("player1_id", authUser.id)
+    .is("player2_id", null)
+    .order("created_at", { ascending: false })
+    .limit(5)
+
+  console.log('🔍 Debug - User\'s own waiting matches:', {
+    totalMyWaiting: myWaitingMatches.length,
+    matches: myWaitingMatches.map(m => ({ id: m.id, game: m.games?.name, bet: m.bet_amount }))
+  })
 
   // Get active match counts per game
   const { data: matchCounts = [] } = await supabase
@@ -67,38 +272,110 @@ export default async function GamesPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
+      <CleanupHandler />
       <Header user={user} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Games Lobby</h1>
-          <p className="text-gray-400">Choose your game and test your skills against other players</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">Games Lobby</h1>
+              <p className="text-gray-400">Choose your game and test your skills against other players</p>
+            </div>
+            <Button 
+              asChild
+              variant="outline"
+              className="border-gray-600 text-gray-300 hover:bg-gray-800"
+            >
+              <Link href="/games">
+                🔄 Refresh
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Games Grid */}
         <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-6">Available Games</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-white">Available Games</h2>
+            <Button
+              href={`/games/${games[0]?.id}/create`}
+              className="btn-primary"
+            >
+              Create New Match
+            </Button>
+          </div>
           <div className="grid md:grid-cols-3 gap-6">
             {games.map((game) => (
               <GameCard
                 key={game.id}
                 game={game}
                 activeMatches={gameMatchCounts[game.id] || 0}
-                onlineUsers={Math.floor(Math.random() * 50) + 10} // Mock data
+                onlineUsers={Math.max(10, (gameMatchCounts[game.id] || 0) * 2 + 15)} // Based on active matches
               />
             ))}
           </div>
         </div>
 
-        {/* Waiting Matches */}
+
+        {/* Debug Section - Remove in production */}
+        {waitingMatchesWithBothPlayers.length > 0 && (
+          <div className="mb-6 p-4 bg-yellow-900/20 border border-yellow-600 rounded-lg">
+            <h3 className="text-yellow-300 font-bold mb-2">⚠️ Debug: Found {waitingMatchesWithBothPlayers.length} matches that should be completed</h3>
+            <p className="text-yellow-200 text-sm mb-3">
+              These matches have both players but are still showing as "waiting". 
+              They should be automatically completed on page refresh.
+            </p>
+            <div className="text-xs text-yellow-300">
+              {waitingMatchesWithBothPlayers.map(m => (
+                <div key={m.id}>
+                  Match {m.id.slice(0, 8)}... - {m.games?.name} - Created: {new Date(m.created_at).toLocaleString()}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Available Matches */}
         <div className="grid lg:grid-cols-2 gap-8">
-          <MatchList
-            matches={waitingMatches}
-            currentUserId={user.username}
-            title="Open Matches"
-            description="Join an existing match or create your own"
-          />
+          {/* All Available Matches */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Available Matches</h3>
+            <p className="text-gray-400 text-sm mb-4">Join existing matches or find opponents</p>
+            
+            <div className="space-y-4">
+              {/* My Active Matchmaking */}
+              <MyMatchmakingQueues queues={myMatchmakingQueues} />
+              
+              {/* Waiting Matches */}
+              {waitingMatches.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Open Matches</h4>
+                  <MatchList
+                    matches={waitingMatches}
+                    currentUserId={user.username}
+                    title=""
+                    description=""
+                  />
+                </div>
+              )}
+              
+              {/* Matchmaking Queues */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Players Searching</h4>
+                <MatchmakingRealtime initialQueues={matchmakingQueues} currentUserId={user.id} />
+              </div>
+              
+              {/* No matches message */}
+              {waitingMatches.length === 0 && matchmakingQueues.length === 0 && myMatchmakingQueues.length === 0 && (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 mb-2">No matches available</div>
+                  <div className="text-gray-500 text-sm">Create a new match to get started!</div>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Quick Stats */}
           <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
@@ -143,7 +420,21 @@ export default async function GamesPage() {
             </div>
           </div>
         </div>
+
+        {/* My Waiting Matches */}
+        {myWaitingMatches.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-2xl font-bold text-white mb-6">My Waiting Matches</h2>
+            <MatchList
+              matches={myWaitingMatches}
+              currentUserId={user.username}
+              title="Waiting for Players"
+              description="Your matches waiting for opponents to join"
+            />
+          </div>
+        )}
       </main>
+      <CleanupHandler />
     </div>
   )
 }

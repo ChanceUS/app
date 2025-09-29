@@ -23,7 +23,7 @@ export async function createMatch(prevState: any, formData: FormData) {
     return { error: "Bet amount must be at least 1 token" }
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
@@ -36,14 +36,24 @@ export async function createMatch(prevState: any, formData: FormData) {
     }
 
     // Check if user has enough tokens
-    const { data: userData } = await supabase.from("users").select("tokens").eq("id", user.id).single()
+    const { data: userData, error: userError } = await supabase.from("users").select("tokens").eq("id", user.id).single()
+
+    if (userError) {
+      console.error("Error fetching user data:", userError)
+      return { error: "Failed to fetch user data" }
+    }
 
     if (!userData || userData.tokens < betAmountNum) {
       return { error: "Insufficient token balance" }
     }
 
     // Verify game exists and get min/max bet limits
-    const { data: gameData } = await supabase.from("games").select("*").eq("id", gameId.toString()).single()
+    const { data: gameData, error: gameError } = await supabase.from("games").select("*").eq("id", gameId.toString()).single()
+
+    if (gameError) {
+      console.error("Error fetching game data:", gameError)
+      return { error: "Failed to fetch game data" }
+    }
 
     if (!gameData) {
       return { error: "Game not found" }
@@ -70,31 +80,44 @@ export async function createMatch(prevState: any, formData: FormData) {
       return { error: "Failed to create match" }
     }
 
-    // Create bet transaction for player 1
+    // Deduct tokens from user
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ tokens: userData.tokens - betAmountNum })
+      .eq("id", user.id)
+
+    if (updateError) {
+      console.error("Error updating user tokens:", updateError)
+      return { error: "Failed to update user tokens" }
+    }
+
+    // Create transaction record
     const { error: transactionError } = await supabase.from("transactions").insert({
       user_id: user.id,
       match_id: matchData.id,
-      type: "bet",
       amount: -betAmountNum,
-      description: `Bet placed for ${gameData.name} match - ${betAmountNum} tokens`,
+      type: "bet",
+      description: `Bet ${betAmountNum} tokens on ${gameData.name}`,
     })
 
     if (transactionError) {
-      console.error("Transaction error:", transactionError)
-      return { error: "Failed to process bet transaction" }
+      console.error("Transaction creation error:", transactionError)
+      return { error: "Failed to create transaction record" }
     }
 
-    revalidatePath("/games")
-    redirect(`/games/match/${matchData.id}`)
+    revalidatePath("/matches")
+    revalidatePath("/dashboard")
+
+    return { success: true, matchId: matchData.id }
   } catch (error) {
-    console.error("Create match error:", error)
+    console.error("Unexpected error in createMatch:", error)
     return { error: "An unexpected error occurred. Please try again." }
   }
 }
 
 // Join an existing match
 export async function joinMatch(matchId: string) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
@@ -140,6 +163,7 @@ export async function joinMatch(matchId: string) {
       .eq("id", matchId)
 
     if (updateError) {
+      console.error("Update match error:", updateError)
       throw new Error("Failed to join match")
     }
 
@@ -158,7 +182,12 @@ export async function joinMatch(matchId: string) {
     }
 
     revalidatePath("/games")
-    redirect(`/games/match/${matchId}`)
+    revalidatePath("/matches")
+    
+    console.log("✅ Match joined successfully:", { matchId, player2Id: user.id })
+    
+    // Return success instead of redirect for server action compatibility
+    return { success: true, matchId }
   } catch (error) {
     console.error("Join match error:", error)
     throw error
@@ -167,7 +196,7 @@ export async function joinMatch(matchId: string) {
 
 // Cancel a match (only if you're the creator and no one has joined)
 export async function cancelMatch(matchId: string) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
@@ -214,7 +243,10 @@ export async function cancelMatch(matchId: string) {
     }
 
     revalidatePath("/games")
-    redirect("/games")
+    revalidatePath("/matches")
+    
+    // Return success instead of redirect for server action compatibility
+    return { success: true }
   } catch (error) {
     console.error("Cancel match error:", error)
     throw error

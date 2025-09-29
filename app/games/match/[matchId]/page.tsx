@@ -1,7 +1,7 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import Header from "@/components/navigation/header"
-import MatchInterface from "@/components/games/match-interface"
+import EnhancedMatchInterface from "@/components/games/enhanced-match-interface"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,8 @@ interface MatchPageProps {
 }
 
 export default async function MatchPage({ params }: MatchPageProps) {
+  const resolvedParams = await params
+  
   if (!isSupabaseConfigured) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
@@ -23,7 +25,7 @@ export default async function MatchPage({ params }: MatchPageProps) {
     )
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser()
@@ -48,7 +50,7 @@ export default async function MatchPage({ params }: MatchPageProps) {
       player1:users!matches_player1_id_fkey (id, username, display_name, avatar_url),
       player2:users!matches_player2_id_fkey (id, username, display_name, avatar_url)
     `)
-    .eq("id", params.matchId)
+    .eq("id", resolvedParams.matchId)
     .single()
 
   if (!match) {
@@ -59,13 +61,6 @@ export default async function MatchPage({ params }: MatchPageProps) {
   const isPlayer1 = match.player1_id === user.id
   const isPlayer2 = match.player2_id === user.id
   const isInMatch = isPlayer1 || isPlayer2
-
-  // Handle match completion
-  const handleMatchComplete = async (winnerId: string | null) => {
-    // This will be handled by the real-time system
-    // The match status and winner will be updated automatically
-    console.log("Match completed, winner:", winnerId)
-  }
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -95,7 +90,7 @@ export default async function MatchPage({ params }: MatchPageProps) {
               </div>
               <div className="flex items-center space-x-3">
                 <Badge className="bg-orange-500/20 text-orange-400 text-lg px-4 py-2">
-                  <Trophy className="mr-2 h-4 w-4" />
+                  <Trophy className="mr-2 h-4 w-6" />
                   {match.bet_amount * 2} tokens
                 </Badge>
                 <Badge
@@ -116,98 +111,12 @@ export default async function MatchPage({ params }: MatchPageProps) {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Player 1 */}
-              <div className={`p-4 rounded-lg ${isPlayer1 ? "bg-orange-500/20 border border-orange-500/30" : "bg-gray-800/30"}`}>
-                <div className="text-center">
-                  <div className="text-sm text-gray-400 mb-2">Player 1</div>
-                  <div className="text-white font-semibold text-lg">
-                    {match.player1?.display_name || match.player1?.username}
-                  </div>
-                  {isPlayer1 && (
-                    <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>
-                  )}
-                </div>
-              </div>
-
-              {/* VS */}
-              <div className="flex items-center justify-center">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-400 mb-2">VS</div>
-                  {match.status === "waiting" && !match.player2_id && (
-                    <div className="text-sm text-gray-500">Waiting for opponent</div>
-                  )}
-                  {match.status === "in_progress" && (
-                    <div className="text-sm text-green-400">Game in progress</div>
-                  )}
-                  {match.status === "completed" && (
-                    <div className="text-sm text-blue-400">Match completed</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Player 2 */}
-              <div className={`p-4 rounded-lg ${isPlayer2 ? "bg-orange-500/20 border border-orange-500/30" : "bg-gray-800/30"}`}>
-                <div className="text-center">
-                  <div className="text-sm text-gray-400 mb-2">Player 2</div>
-                  {match.player2 ? (
-                    <>
-                      <div className="text-white font-semibold text-lg">
-                        {match.player2.display_name || match.player2.username}
-                      </div>
-                      {isPlayer2 && (
-                        <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-gray-400">Waiting...</div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Match Info */}
-            <div className="mt-6 pt-6 border-t border-gray-800">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div className="text-center">
-                  <div className="text-gray-400">Created</div>
-                  <div className="text-white">
-                    {new Date(match.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-                {match.started_at && (
-                  <div className="text-center">
-                    <div className="text-gray-400">Started</div>
-                    <div className="text-white">
-                      {new Date(match.started_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                )}
-                {match.completed_at && (
-                  <div className="text-center">
-                    <div className="text-gray-400">Completed</div>
-                    <div className="text-white">
-                      {new Date(match.completed_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                )}
-                <div className="text-center">
-                  <div className="text-gray-400">Bet Amount</div>
-                  <div className="text-orange-400 font-semibold">
-                    {match.bet_amount} tokens
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
         </Card>
 
         {/* Game Interface */}
-        <MatchInterface
+        <EnhancedMatchInterface
           match={match}
           currentUser={user}
-          onMatchComplete={handleMatchComplete}
         />
 
         {/* Match Actions */}

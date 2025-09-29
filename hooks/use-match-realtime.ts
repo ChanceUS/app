@@ -96,7 +96,7 @@ export function useMatchRealtime({
       matchSubscription.unsubscribe()
       historySubscription.unsubscribe()
     }
-  }, [matchId, fetchMatch, onMatchUpdate, onGameDataUpdate])
+  }, [matchId, onMatchUpdate, onGameDataUpdate]) // Removed fetchMatch from dependencies
 
   // Function to update match
   const updateMatch = useCallback(async (updates: Partial<Match>) => {

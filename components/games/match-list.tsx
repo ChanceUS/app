@@ -1,11 +1,13 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Clock, Users, Zap, X } from "lucide-react"
 import { joinMatch, cancelMatch } from "@/lib/game-actions"
+import { useRouter } from "next/navigation"
 
 interface Match {
   id: string
@@ -14,7 +16,7 @@ interface Match {
   games: {
     name: string
   }
-  users: {
+  player1: {
     username: string
     display_name?: string
     avatar_url?: string
@@ -29,21 +31,49 @@ interface MatchListProps {
 }
 
 export default function MatchList({ matches, currentUserId, title, description }: MatchListProps) {
+  const router = useRouter()
+  const [joiningMatch, setJoiningMatch] = useState<string | null>(null)
+  const [cancellingMatch, setCancellingMatch] = useState<string | null>(null)
+
   const handleJoinMatch = async (matchId: string) => {
     try {
-      await joinMatch(matchId)
+      setJoiningMatch(matchId)
+      console.log("🎮 Attempting to join match:", matchId)
+      const result = await joinMatch(matchId)
+      console.log("🎮 Join match result:", result)
+      if (result?.success && result?.matchId) {
+        console.log("🎮 Redirecting to match page:", `/games/match/${result.matchId}`)
+        // Navigate to the match page after successful join
+        router.push(`/games/match/${result.matchId}`)
+      } else {
+        console.log("❌ Join match failed - no success or matchId")
+      }
     } catch (error) {
       console.error("Failed to join match:", error)
       // In a real app, you'd show a toast notification here
+    } finally {
+      setJoiningMatch(null)
     }
   }
 
   const handleCancelMatch = async (matchId: string) => {
     try {
-      await cancelMatch(matchId)
+      setCancellingMatch(matchId)
+      console.log(`Attempting to cancel match ${matchId}`)
+      const result = await cancelMatch(matchId)
+      console.log(`Cancel result:`, result)
+      if (result?.success) {
+        // Force a hard refresh to ensure the UI updates
+        window.location.reload()
+      } else {
+        console.error("Cancel failed:", result)
+        alert("Failed to cancel match. It may have already been joined or cancelled.")
+      }
     } catch (error) {
       console.error("Failed to cancel match:", error)
-      // In a real app, you'd show a toast notification here
+      alert("Failed to cancel match: " + (error instanceof Error ? error.message : "Unknown error"))
+    } finally {
+      setCancellingMatch(null)
     }
   }
 
@@ -69,9 +99,9 @@ export default function MatchList({ matches, currentUserId, title, description }
               >
                 <div className="flex items-center space-x-4">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={match.users.avatar_url || ""} alt={match.users.username} />
+                    <AvatarImage src={match.player1?.avatar_url || ""} alt={match.player1?.username || "Player"} />
                     <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-yellow-500 text-black font-semibold">
-                      {match.users.username.charAt(0).toUpperCase()}
+                      {match.player1?.username?.charAt(0).toUpperCase() || "P"}
                     </AvatarFallback>
                   </Avatar>
                   <div>
@@ -80,7 +110,7 @@ export default function MatchList({ matches, currentUserId, title, description }
                       <Badge className="bg-yellow-500/20 text-yellow-400">{match.bet_amount} tokens</Badge>
                     </div>
                     <div className="text-sm text-gray-400 flex items-center">
-                      <span>by @{match.users.username}</span>
+                      <span>by @{match.player1?.username || "Unknown"}</span>
                       <Clock className="h-3 w-3 ml-2 mr-1" />
                       <span>
                         {new Date(match.created_at).toLocaleDateString("en-US", {
@@ -92,24 +122,26 @@ export default function MatchList({ matches, currentUserId, title, description }
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {match.users.username === currentUserId ? (
+                  {match.player1?.username === currentUserId ? (
                     <Button
                       variant="outline"
                       size="sm"
                       className="border-red-500/50 text-red-400 hover:bg-red-500/10 bg-transparent"
                       onClick={() => handleCancelMatch(match.id)}
+                      disabled={cancellingMatch === match.id}
                     >
                       <X className="h-4 w-4 mr-1" />
-                      Cancel
+                      {cancellingMatch === match.id ? "Cancelling..." : "Cancel"}
                     </Button>
                   ) : (
                     <Button
                       size="sm"
                       className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-black font-semibold"
                       onClick={() => handleJoinMatch(match.id)}
+                      disabled={joiningMatch === match.id}
                     >
                       <Zap className="h-4 w-4 mr-1" />
-                      Join Match
+                      {joiningMatch === match.id ? "Joining..." : "Join Match"}
                     </Button>
                   )}
                 </div>
