@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -42,28 +42,36 @@ export default function MultiplayerMathBlitz({
   const [showInstructions, setShowInstructions] = useState(false) // Auto-start since countdown already happened
   const [hasAnsweredCurrentProblem, setHasAnsweredCurrentProblem] = useState(false)
   const [localAnswerSubmitted, setLocalAnswerSubmitted] = useState(false)
+  const [hasSubmittedFinalResult, setHasSubmittedFinalResult] = useState(false)
 
   const isPlayer1 = currentUserId === player1Id
   const playerId = isPlayer1 ? 'player1' : 'player2'
   
   // Check if both players have answered the current question using shared state
   const [sharedState, setSharedState] = useState<any>(null)
+  const lastSharedStateRef = useRef<string>('')
   
   useEffect(() => {
     const checkSharedState = () => {
       const stored = localStorage.getItem(`gameState_${matchId}`)
       if (stored) {
-        const parsed = JSON.parse(stored)
-        setSharedState(parsed)
-        console.log('🔄 Shared state updated:', {
-          p1Answers: parsed.player1Answers.length,
-          p2Answers: parsed.player2Answers.length,
-          currentIndex: parsed.currentProblemIndex
-        })
+        // Only update if the stored state is actually different
+        if (stored !== lastSharedStateRef.current) {
+          lastSharedStateRef.current = stored
+          const parsed = JSON.parse(stored)
+          
+          console.log('🔄 Shared state updated:', {
+            p1Answers: parsed.player1Answers.length,
+            p2Answers: parsed.player2Answers.length,
+            currentIndex: parsed.currentProblemIndex
+          })
+          
+          setSharedState(parsed)
+        }
       }
     }
     checkSharedState()
-    const interval = setInterval(checkSharedState, 100)
+    const interval = setInterval(checkSharedState, 200) // Reduced frequency
     return () => clearInterval(interval)
   }, [matchId])
 
@@ -75,6 +83,74 @@ export default function MultiplayerMathBlitz({
   const bothPlayersAnsweredAlt = sharedState && currentProblem && 
     sharedState.player1Answers.length > sharedState.currentProblemIndex &&
     sharedState.player2Answers.length > sharedState.currentProblemIndex
+
+  // Final result synchronization - ensure both players see the same result
+  useEffect(() => {
+    if (!gameState || !gameState.player1Finished || !gameState.player2Finished) return
+
+    // Check if we have a shared final result
+    const finalResultKey = `finalResult_${matchId}`
+    const storedFinalResult = localStorage.getItem(finalResultKey)
+    
+    if (storedFinalResult) {
+      const finalResult = JSON.parse(storedFinalResult)
+      console.log('🔄 Using synchronized final result:', finalResult)
+      setGameResult(finalResult)
+    } else if (gameResult) {
+      // Only store the result if we haven't already stored one
+      // This prevents both players from overwriting each other's results
+      const existingResult = localStorage.getItem(finalResultKey)
+      if (!existingResult) {
+        console.log('💾 Storing final result for synchronization:', gameResult)
+        localStorage.setItem(finalResultKey, JSON.stringify(gameResult))
+      } else {
+        console.log('🔄 Final result already exists, using existing one')
+        const existingFinalResult = JSON.parse(existingResult)
+        setGameResult(existingFinalResult)
+      }
+    }
+  }, [gameResult, matchId])
+
+  // Additional synchronization check - poll for final result if game is finished
+  useEffect(() => {
+    if (!gameState || !gameState.player1Finished || !gameState.player2Finished) return
+
+    const checkForFinalResult = () => {
+      const finalResultKey = `finalResult_${matchId}`
+      const storedFinalResult = localStorage.getItem(finalResultKey)
+      
+      if (storedFinalResult) {
+        const finalResult = JSON.parse(storedFinalResult)
+        console.log('🔄 Polling found final result:', finalResult)
+        
+        // Force update the game result to ensure synchronization
+        setGameResult(finalResult)
+        
+        // Also update the game state to match the final result
+        if (finalResult.player1Result && finalResult.player2Result && gameState) {
+          console.log('🔄 Updating game state with final result data')
+          setGameState(prev => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              player1Answers: finalResult.player1Result.answers || prev.player1Answers,
+              player2Answers: finalResult.player2Result.answers || prev.player2Answers,
+              player1Score: finalResult.player1Result.score || prev.player1Score,
+              player2Score: finalResult.player2Result.score || prev.player2Score
+            }
+          })
+        }
+      }
+    }
+
+    // Check immediately
+    checkForFinalResult()
+    
+    // Poll every 500ms for final result
+    const interval = setInterval(checkForFinalResult, 500)
+    
+    return () => clearInterval(interval)
+  }, [matchId, gameResult])
   
   // Debug logging
   if (gameState && currentProblem) {
@@ -113,74 +189,54 @@ export default function MultiplayerMathBlitz({
       
       // Save initial state to localStorage for sharing between players
       localStorage.setItem(`gameState_${matchId}`, JSON.stringify(initialState))
+      
+      console.log('🎮 Game initialized with timer:', initialState.problems[0].timeLimit)
     }
-  }, [matchId, gameState])
+  }, [matchId])
 
-  // Poll for shared game state updates
+  // Listen for storage events (when localStorage changes in other tabs)
   useEffect(() => {
-    const pollForSharedState = () => {
-      try {
-        const sharedState = localStorage.getItem(`gameState_${matchId}`)
-        if (sharedState) {
-          const parsedState = JSON.parse(sharedState)
-          
-          // Get current state from the state setter function
-          setGameState(currentState => {
-            if (!currentState) return currentState
-            
-            // Check if the shared state is different from our local state
-            const indexChanged = parsedState.currentProblemIndex !== currentState.currentProblemIndex
-            const p1Changed = parsedState.player1Answers.length !== currentState.player1Answers.length
-            const p2Changed = parsedState.player2Answers.length !== currentState.player2Answers.length
-            
-            if (indexChanged || p1Changed || p2Changed) {
-              console.log('🔄 Shared state update detected:', {
-                sharedIndex: parsedState.currentProblemIndex,
-                localIndex: currentState.currentProblemIndex,
-                sharedP1: parsedState.player1Answers.length,
-                localP1: currentState.player1Answers.length,
-                sharedP2: parsedState.player2Answers.length,
-                localP2: currentState.player2Answers.length,
-                changes: { indexChanged, p1Changed, p2Changed }
-              })
-              
-              return parsedState
-            }
-            
-            return currentState
-          })
-        }
-      } catch (error) {
-        console.error('Error polling shared state:', error)
-      }
-    }
-
-    // Listen for storage events (when localStorage changes in other tabs)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === `gameState_${matchId}` && e.newValue) {
         console.log('🔄 Storage event detected, checking for updates...')
-        pollForSharedState()
+        // The pollForUpdates function will handle this
+      }
+      
+      // Also listen for final result synchronization
+      if (e.key === `finalResult_${matchId}` && e.newValue) {
+        const finalResult = JSON.parse(e.newValue)
+        console.log('🔄 Final result sync received via storage event:', finalResult)
+        setGameResult(finalResult)
       }
     }
 
     window.addEventListener('storage', handleStorageChange)
-    const interval = setInterval(pollForSharedState, 200) // Poll every 200ms for faster updates
     
     return () => {
-      clearInterval(interval)
       window.removeEventListener('storage', handleStorageChange)
     }
-  }, [matchId]) // Removed gameState from dependencies
+  }, [matchId])
 
   // Timer countdown
   useEffect(() => {
-    if (!gameState || gameState.player1Finished && gameState.player2Finished) return
+    if (!gameState || !currentProblem || gameState.player1Finished && gameState.player2Finished) return
+
+    // Start timer immediately when game state is available
+    console.log('⏰ Starting timer for problem:', currentProblem.id, 'Time limit:', currentProblem.timeLimit)
+    setTimeRemaining(currentProblem.timeLimit)
 
     const timer = setInterval(() => {
       setTimeRemaining(prev => {
+        console.log('⏰ Timer tick:', prev, 'localAnswerSubmitted:', localAnswerSubmitted)
         if (prev <= 1) {
           // Time's up - submit no answer
+          console.log('⏰ Time up! Submitting no answer')
+          if (!localAnswerSubmitted) {
+            console.log('⏰ Calling handleAnswer(-1) for timeout')
           handleAnswer(-1) // -1 indicates no answer/timeout
+          } else {
+            console.log('⏰ Already answered, skipping timeout submission')
+          }
           return 0
         }
         return prev - 1
@@ -188,48 +244,62 @@ export default function MultiplayerMathBlitz({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [gameState])
+  }, [currentProblem]) // Only depend on currentProblem, not gameState
 
-  // Update opponent progress from shared state
+  // Update opponent progress from game state (which includes merged data)
   useEffect(() => {
-    if (!sharedState) return
-
-    const opponentAnswers = isPlayer1 ? sharedState.player2Answers : sharedState.player1Answers
-    const opponentScore = isPlayer1 ? sharedState.player2Score : sharedState.player1Score
+    if (!gameState) return
+    
+    const opponentAnswers = isPlayer1 ? gameState.player2Answers : gameState.player1Answers
+    const opponentScore = isPlayer1 ? gameState.player2Score : gameState.player1Score
     
     setOpponentProgress(opponentAnswers.length)
     
-    console.log('🔄 Opponent progress updated:', {
+    console.log('🔄 Opponent progress updated from game state:', {
       isPlayer1,
       opponentAnswers: opponentAnswers.length,
       opponentScore,
-      player1Score: sharedState.player1Score,
-      player2Score: sharedState.player2Score
+      player1Score: gameState.player1Score,
+      player2Score: gameState.player2Score,
+      p1AnswersLength: gameState.player1Answers?.length || 0,
+      p2AnswersLength: gameState.player2Answers?.length || 0
     })
-  }, [sharedState, isPlayer1])
+  }, [gameState, isPlayer1])
 
-  // Handle question advancement when game state changes
+  // Update current problem when game state changes
   useEffect(() => {
-    if (!gameState || !currentProblem) return
+    if (!gameState) return
     
-    console.log('🔄 Game state changed, checking question advancement:', {
+    console.log('🔄 Game state changed, updating current problem:', {
       currentProblemIndex: gameState.currentProblemIndex,
-      currentProblemId: currentProblem.id,
       problemsLength: gameState.problems.length
     })
     
-    // Update current problem if index changed
+    // Check if game is finished first
+    if (gameState.player1Finished && gameState.player2Finished) {
+      console.log('🏁 Game finished, not updating problem')
+      return
+    }
+    
+    // Update current problem if index changed and game is not finished
     if (gameState.currentProblemIndex < gameState.problems.length) {
       const newProblem = gameState.problems[gameState.currentProblemIndex]
-      if (newProblem && newProblem.id !== currentProblem.id) {
+      if (newProblem) {
         console.log('➡️ Updating to new problem:', newProblem.id)
         setCurrentProblem(newProblem)
         setTimeRemaining(newProblem.timeLimit)
         setHasAnsweredCurrentProblem(false) // Reset answer flag for new question
         setLocalAnswerSubmitted(false) // Reset local answer flag for new question
       }
+    } else {
+      console.log('⚠️ Problem index out of bounds:', {
+        currentIndex: gameState.currentProblemIndex,
+        problemsLength: gameState.problems.length,
+        p1Finished: gameState.player1Finished,
+        p2Finished: gameState.player2Finished
+      })
     }
-  }, [gameState, currentProblem])
+  }, [gameState])
 
   // Simple polling to sync state between players
   useEffect(() => {
@@ -238,6 +308,15 @@ export default function MultiplayerMathBlitz({
       if (sharedState) {
         const parsedState = JSON.parse(sharedState)
         
+        // Don't update sharedState here to avoid infinite loops
+        // The main polling useEffect will handle sharedState updates
+        
+        // Stop polling if game is finished to prevent infinite loops
+        if (parsedState.player1Finished && parsedState.player2Finished) {
+          console.log('🏁 Game finished, stopping polling to prevent infinite loops')
+          return
+        }
+        
         // Sync the state and handle game completion
         setGameState(currentState => {
           if (!currentState) return currentState
@@ -245,6 +324,8 @@ export default function MultiplayerMathBlitz({
           if (parsedState.currentProblemIndex !== currentState.currentProblemIndex ||
               parsedState.player1Answers.length !== currentState.player1Answers.length ||
               parsedState.player2Answers.length !== currentState.player2Answers.length ||
+              parsedState.player1Score !== currentState.player1Score ||
+              parsedState.player2Score !== currentState.player2Score ||
               parsedState.player1Finished !== currentState.player1Finished ||
               parsedState.player2Finished !== currentState.player2Finished) {
             
@@ -255,17 +336,17 @@ export default function MultiplayerMathBlitz({
               localP1: currentState.player1Answers.length,
               sharedP2: parsedState.player2Answers.length,
               localP2: currentState.player2Answers.length,
+              sharedP1Score: parsedState.player1Score,
+              localP1Score: currentState.player1Score,
+              sharedP2Score: parsedState.player2Score,
+              localP2Score: currentState.player2Score,
               gameFinished: parsedState.player1Finished && parsedState.player2Finished
             })
             
-            // If game is finished, calculate and set the result
-            if (parsedState.player1Finished && parsedState.player2Finished && !currentState.player1Finished) {
-              console.log('🏁 Game finished via sync, calculating results...')
-              const result = calculateMultiplayerResult(parsedState)
-              setGameResult(result)
-              onGameComplete?.(result)
-            }
+            // Game completion is handled in handleAnswer function
+            // This polling function only handles state synchronization
             
+            // Return the merged state to ensure opponent data is preserved
             return parsedState
           }
           
@@ -305,56 +386,154 @@ export default function MultiplayerMathBlitz({
     const timeSpent = currentProblem.timeLimit - timeRemaining
     const newGameState = submitPlayerAnswer(gameState, playerId, answer, timeSpent)
     
-    console.log('🔄 New game state:', { 
+    console.log('🔄 New game state after submitPlayerAnswer:', { 
       currentProblemIndex: newGameState.currentProblemIndex, 
       player1Answers: newGameState.player1Answers.length,
       player2Answers: newGameState.player2Answers.length,
-      winner: newGameState.winner
+      winner: newGameState.winner,
+      problemsLength: newGameState.problems.length,
+      isFinished: newGameState.currentProblemIndex >= newGameState.problems.length
     })
-    
-    setGameState(newGameState)
     
     // Save updated state to localStorage for sharing between players
-    localStorage.setItem(`gameState_${matchId}`, JSON.stringify(newGameState))
-    console.log('💾 Saved game state to localStorage for sharing:', {
+    // Always merge with existing shared state to preserve opponent's data
+    const existingSharedState = localStorage.getItem(`gameState_${matchId}`)
+    let stateToSave = newGameState
+    
+    if (existingSharedState) {
+      try {
+        const parsedExisting = JSON.parse(existingSharedState)
+        console.log('🔄 Existing shared state found:', {
+          p1Answers: parsedExisting.player1Answers?.length || 0,
+          p2Answers: parsedExisting.player2Answers?.length || 0,
+          p1Score: parsedExisting.player1Score || 0,
+          p2Score: parsedExisting.player2Score || 0
+        })
+        
+        // Always merge both players' data to ensure nothing is lost
+        stateToSave = {
+          ...newGameState,
+          // Preserve opponent's answers and score
+          player1Answers: isPlayer1 ? newGameState.player1Answers : (parsedExisting.player1Answers || []),
+          player2Answers: !isPlayer1 ? newGameState.player2Answers : (parsedExisting.player2Answers || []),
+          player1Score: isPlayer1 ? newGameState.player1Score : (parsedExisting.player1Score || 0),
+          player2Score: !isPlayer1 ? newGameState.player2Score : (parsedExisting.player2Score || 0)
+        }
+        
+        console.log('🔄 Merged state created:', {
+          p1Answers: stateToSave.player1Answers.length,
+          p2Answers: stateToSave.player2Answers.length,
+          p1Score: stateToSave.player1Score,
+          p2Score: stateToSave.player2Score,
+          isPlayer1
+        })
+      } catch (error) {
+        console.error('Error parsing existing shared state:', error)
+        // If parsing fails, just use the new state
+        stateToSave = newGameState
+      }
+    }
+    
+    localStorage.setItem(`gameState_${matchId}`, JSON.stringify(stateToSave))
+    console.log('💾 Saved merged game state to localStorage for sharing:', {
       matchId,
       playerId,
-      p1Answers: newGameState.player1Answers.length,
-      p2Answers: newGameState.player2Answers.length,
-      currentIndex: newGameState.currentProblemIndex
+      p1Answers: stateToSave.player1Answers.length,
+      p2Answers: stateToSave.player2Answers.length,
+      currentIndex: stateToSave.currentProblemIndex
     })
+    
+    // Update local game state with merged data to show opponent's progress
+    setGameState(stateToSave)
+    console.log('🔄 Game state updated in component with merged data')
 
-    // Advance to next question immediately after answering (no waiting for other player)
-    if (newGameState.currentProblemIndex < newGameState.problems.length - 1) {
-      console.log('🚀 Advancing to next question immediately!')
-      const advancedState = {
-        ...newGameState,
-        currentProblemIndex: newGameState.currentProblemIndex + 1
+    // Reset local answer flag for next question
+    setLocalAnswerSubmitted(false)
+    setHasAnsweredCurrentProblem(false)
+    
+    // Check if this player is finished (using the merged state)
+    console.log('🔍 Checking if player finished:', {
+      currentIndex: stateToSave.currentProblemIndex,
+      problemsLength: stateToSave.problems.length,
+      isFinished: stateToSave.currentProblemIndex >= stateToSave.problems.length,
+      p1Finished: stateToSave.player1Finished,
+      p2Finished: stateToSave.player2Finished
+    })
+    
+    // Force mark player as finished if we're past the last question
+    if (stateToSave.currentProblemIndex >= stateToSave.problems.length) {
+      console.log('🏁 Player is past last question, forcing finish state')
+      if (isPlayer1) {
+        stateToSave.player1Finished = true
+      } else {
+        stateToSave.player2Finished = true
       }
-      localStorage.setItem(`gameState_${matchId}`, JSON.stringify(advancedState))
-      setGameState(advancedState)
-      setLocalAnswerSubmitted(false)
-      setHasAnsweredCurrentProblem(false)
-    } else {
-      console.log('🏁 Game finished!')
+    }
+    
+    if (stateToSave.currentProblemIndex >= stateToSave.problems.length) {
+      console.log('🏁 This player finished!')
       const finishedState: MultiplayerGameState = {
-        ...newGameState,
+        ...stateToSave, // Use the merged state instead of newGameState
         gameEndTime: Date.now(),
-        player1Finished: true,
-        player2Finished: true,
-        winner: newGameState.player1Score > newGameState.player2Score ? 'player1' : 
-               newGameState.player2Score > newGameState.player1Score ? 'player2' : 'draw'
+        // Only mark the current player as finished
+        player1Finished: isPlayer1 ? true : (stateToSave.player1Finished || false),
+        player2Finished: !isPlayer1 ? true : (stateToSave.player2Finished || false),
+        winner: 'draw' // Will be calculated properly by calculateMultiplayerResult
       }
       localStorage.setItem(`gameState_${matchId}`, JSON.stringify(finishedState))
       setGameState(finishedState)
       
-      // Calculate and set the game result
-      const result = calculateMultiplayerResult(finishedState)
-      setGameResult(result)
-      
-      // Call onGameComplete to update match status in database
-      console.log('🎮 Calling onGameComplete with result:', result)
-      onGameComplete?.(result)
+      // Only calculate and submit final result if BOTH players have finished
+      if (finishedState.player1Finished && finishedState.player2Finished) {
+        console.log('🏁 Both players finished! Calculating final result...')
+        
+        // Check if result already exists in localStorage
+        const finalResultKey = `finalResult_${matchId}`
+        const existingResult = localStorage.getItem(finalResultKey)
+        
+        if (existingResult) {
+          // Use existing result
+          const result = JSON.parse(existingResult)
+          console.log('🔄 Using existing result from localStorage:', result)
+          setGameResult(result)
+        } else {
+          // Calculate new result
+          const result = calculateMultiplayerResult(finishedState)
+          console.log('🎯 Calculated new result:', result)
+          
+          // Store the result for synchronization
+          localStorage.setItem(finalResultKey, JSON.stringify(result))
+          setGameResult(result)
+          
+          // Only call onGameComplete if we haven't already submitted the final result
+          const submissionKey = `finalResultSubmitted_${matchId}`
+          const currentSubmission = localStorage.getItem(submissionKey)
+          
+          if (!currentSubmission && !hasSubmittedFinalResult) {
+            try {
+              localStorage.setItem(submissionKey, playerId)
+              const verification = localStorage.getItem(submissionKey)
+              if (verification === playerId) {
+                console.log('🎮 Calling onGameComplete with result:', result)
+                setHasSubmittedFinalResult(true)
+                onGameComplete?.(result)
+              } else {
+                console.log('🔄 Another player got the lock first, skipping onGameComplete')
+              }
+            } catch (error) {
+              console.log('🔄 Failed to set submission flag, skipping onGameComplete')
+            }
+          } else {
+            console.log('🔄 Final result already submitted, skipping onGameComplete')
+          }
+        }
+    } else {
+        console.log('⏳ Waiting for opponent to finish...', {
+          p1Finished: finishedState.player1Finished,
+          p2Finished: finishedState.player2Finished,
+          isPlayer1
+        })
+      }
     }
     
     // Trigger a manual check for shared state updates
@@ -370,7 +549,7 @@ export default function MultiplayerMathBlitz({
         })
       }
     }, 100)
-  }, [currentProblem, timeRemaining, playerId, onGameComplete, localAnswerSubmitted, gameState])
+  }, [currentProblem, playerId, onGameComplete, localAnswerSubmitted])
 
   const handleStartGame = () => {
     setShowInstructions(false)
@@ -482,9 +661,25 @@ export default function MultiplayerMathBlitz({
               <h3 className="text-lg font-semibold text-white mb-4">Your Results</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Final Score:</span>
-                  <span className="text-white font-bold text-xl">{myResult.score}</span>
+                  <span className="text-gray-400">Composite Score:</span>
+                  <span className="text-white font-bold text-xl">{myResult.compositeScore || myResult.score}</span>
                 </div>
+                {myResult.scoreBreakdown && (
+                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Base: {myResult.scoreBreakdown.baseScore}</span>
+                      <span className="text-green-400">+Acc: {myResult.scoreBreakdown.accuracyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-400">+Speed: {myResult.scoreBreakdown.speedBonus}</span>
+                      <span className="text-purple-400">+Cons: {myResult.scoreBreakdown.consistencyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-400">+Complete: {myResult.scoreBreakdown.completionBonus}</span>
+                      <span className="text-white font-semibold">= {myResult.compositeScore}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Problems Solved:</span>
                   <span className="text-green-400 font-semibold">{myResult.problemsSolved}/10</span>
@@ -508,9 +703,25 @@ export default function MultiplayerMathBlitz({
               <h3 className="text-lg font-semibold text-white mb-4">Opponent Results</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-400">Final Score:</span>
-                  <span className="text-white font-bold text-xl">{opponentResult.score}</span>
+                  <span className="text-gray-400">Composite Score:</span>
+                  <span className="text-white font-bold text-xl">{opponentResult.compositeScore || opponentResult.score}</span>
                 </div>
+                {opponentResult.scoreBreakdown && (
+                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Base: {opponentResult.scoreBreakdown.baseScore}</span>
+                      <span className="text-green-400">+Acc: {opponentResult.scoreBreakdown.accuracyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-400">+Speed: {opponentResult.scoreBreakdown.speedBonus}</span>
+                      <span className="text-purple-400">+Cons: {opponentResult.scoreBreakdown.consistencyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-400">+Complete: {opponentResult.scoreBreakdown.completionBonus}</span>
+                      <span className="text-white font-semibold">= {opponentResult.compositeScore}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Problems Solved:</span>
                   <span className="text-green-400 font-semibold">{opponentResult.problemsSolved}/10</span>
@@ -535,7 +746,9 @@ export default function MultiplayerMathBlitz({
           <Alert className="bg-gray-800/50 border-gray-700">
             <Trophy className="h-4 w-4" />
             <AlertDescription className="text-gray-300">
-              Winner determined by: <span className="text-white font-semibold capitalize">{gameResult.winReason}</span>
+              Winner determined by: <span className="text-white font-semibold capitalize">
+                {gameResult.winReason === 'composite' ? 'Overall Performance' : gameResult.winReason}
+              </span>
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -552,6 +765,23 @@ export default function MultiplayerMathBlitz({
         </CardContent>
       </Card>
     )
+  }
+
+  // Don't render questions if both players are finished OR if we're past the last question
+  if (gameState.player1Finished && gameState.player2Finished) {
+    console.log('🏁 Game finished, not rendering questions')
+    return null
+  }
+  
+  // Also don't render if we're past the last question (safety check)
+  if (gameState.currentProblemIndex >= gameState.problems.length) {
+    console.log('⚠️ Past last question, not rendering questions:', {
+      currentIndex: gameState.currentProblemIndex,
+      problemsLength: gameState.problems.length,
+      p1Finished: gameState.player1Finished,
+      p2Finished: gameState.player2Finished
+    })
+    return null
   }
 
   return (
@@ -572,6 +802,9 @@ export default function MultiplayerMathBlitz({
           <div className="text-right">
             <p className="text-gray-400">Opponent Progress</p>
             <p className="text-2xl font-bold text-orange-500">{opponentProgress}/10</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Score: {isPlayer1 ? gameState.player2Score : gameState.player1Score} pts
+            </p>
           </div>
         </div>
         
@@ -596,93 +829,6 @@ export default function MultiplayerMathBlitz({
           <h2 className="text-5xl font-bold text-white mb-8">{currentProblem.question}</h2>
           {localAnswerSubmitted && (
             <p className="text-green-400 text-lg mb-4">✓ Answer submitted! Moving to next question...</p>
-          )}
-          {/* Debug info */}
-          {gameState && (
-            <div className="text-xs text-gray-500 mt-2 space-y-1">
-              <div>
-                Debug: Local P1:{gameState.player1Answers.length} P2:{gameState.player2Answers.length} 
-                Index:{gameState.currentProblemIndex} | Shared P1:{sharedState?.player1Answers.length || 0} P2:{sharedState?.player2Answers.length || 0} 
-                Index:{sharedState?.currentProblemIndex || 0} | Both:{bothPlayersAnswered ? 'Y' : 'N'} 
-                BothAlt:{bothPlayersAnsweredAlt ? 'Y' : 'N'} Local:{localAnswerSubmitted ? 'Y' : 'N'}
-              </div>
-              <div className="space-x-2">
-                <button 
-                  onClick={() => {
-                    const sharedState = localStorage.getItem(`gameState_${matchId}`)
-                    if (sharedState) {
-                      const parsedState = JSON.parse(sharedState)
-                      console.log('🔍 Manual debug check:', parsedState)
-                      setGameState(parsedState)
-                    }
-                  }}
-                  className="text-blue-400 hover:text-blue-300 underline"
-                >
-                  🔄 Force Sync
-                </button>
-                <button 
-                  onClick={() => {
-                    const sharedState = localStorage.getItem(`gameState_${matchId}`)
-                    console.log('🔍 Current localStorage state:', sharedState)
-                    if (sharedState) {
-                      const parsedState = JSON.parse(sharedState)
-                      console.log('🔍 Parsed localStorage state:', {
-                        p1Answers: parsedState.player1Answers.length,
-                        p2Answers: parsedState.player2Answers.length,
-                        currentIndex: parsedState.currentProblemIndex
-                      })
-                    }
-                  }}
-                  className="text-green-400 hover:text-green-300 underline"
-                >
-                  📊 Show Storage
-                </button>
-                <button 
-                  onClick={() => {
-                    console.log('🔄 Resetting answer state...')
-                    setLocalAnswerSubmitted(false)
-                    setHasAnsweredCurrentProblem(false)
-                  }}
-                  className="text-yellow-400 hover:text-yellow-300 underline"
-                >
-                  🔄 Reset Answer
-                </button>
-                <button 
-                  onClick={() => {
-                    if (gameState && gameState.currentProblemIndex < gameState.problems.length - 1) {
-                      console.log('🚀 Manually advancing question...')
-                      const newGameState = {
-                        ...gameState,
-                        currentProblemIndex: gameState.currentProblemIndex + 1
-                      }
-                      setGameState(newGameState)
-                      localStorage.setItem(`gameState_${matchId}`, JSON.stringify(newGameState))
-                      setLocalAnswerSubmitted(false)
-                      setHasAnsweredCurrentProblem(false)
-                    }
-                  }}
-                  className="text-purple-400 hover:text-purple-300 underline"
-                >
-                  ➡️ Next Question
-                </button>
-                <button 
-                  onClick={() => {
-                    console.log('🔄 Manually checking shared state...')
-                    const stored = localStorage.getItem(`gameState_${matchId}`)
-                    if (stored) {
-                      const parsed = JSON.parse(stored)
-                      console.log('🔍 Current shared state:', parsed)
-                      setSharedState(parsed)
-                    } else {
-                      console.log('❌ No shared state found in localStorage')
-                    }
-                  }}
-                  className="text-cyan-400 hover:text-cyan-300 underline"
-                >
-                  🔄 Check Shared
-                </button>
-              </div>
-            </div>
           )}
           
           {/* Answer Options */}
@@ -725,10 +871,7 @@ export default function MultiplayerMathBlitz({
           <div className="p-3 bg-gray-900 rounded-lg">
             <p className="text-gray-400 text-sm">Opponent Score</p>
             <p className="text-white font-bold text-xl">
-              {sharedState ? (isPlayer1 ? sharedState.player2Score : sharedState.player1Score) : '...'}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Debug: P1:{sharedState?.player1Score || 0} P2:{sharedState?.player2Score || 0}
+              {isPlayer1 ? gameState.player2Score : gameState.player1Score}
             </p>
           </div>
         </div>

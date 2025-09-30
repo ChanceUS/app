@@ -57,6 +57,14 @@ export interface MultiplayerResult {
     accuracy: number
     totalTime: number
     streak: number
+    compositeScore?: number
+    scoreBreakdown?: {
+      baseScore: number
+      accuracyBonus: number
+      speedBonus: number
+      consistencyBonus: number
+      completionBonus: number
+    }
   }
   player2Result: {
     score: number
@@ -64,9 +72,17 @@ export interface MultiplayerResult {
     accuracy: number
     totalTime: number
     streak: number
+    compositeScore?: number
+    scoreBreakdown?: {
+      baseScore: number
+      accuracyBonus: number
+      speedBonus: number
+      consistencyBonus: number
+      completionBonus: number
+    }
   }
   winner: 'player1' | 'player2' | 'draw'
-  winReason: 'score' | 'time' | 'accuracy'
+  winReason: 'score' | 'composite' | 'accuracy' | 'time' | 'consistency'
 }
 
 // Generate random math problems
@@ -539,34 +555,38 @@ export function submitPlayerAnswer(
     }
   }
   
-  // Check if both players have answered the current problem
-  // Both players need to have answered exactly currentProblemIndex + 1 problems
-  const requiredAnswers = gameState.currentProblemIndex + 1
-  console.log('🔍 Question advancement check:', {
-    currentProblemIndex: gameState.currentProblemIndex,
-    requiredAnswers,
-    player1Answers: newState.player1Answers.length,
-    player2Answers: newState.player2Answers.length,
-    player1HasEnough: newState.player1Answers.length >= requiredAnswers,
-    player2HasEnough: newState.player2Answers.length >= requiredAnswers
+  // Advance to next question immediately after any player answers
+  // No need to wait for both players
+  console.log('🚀 Advancing to next question immediately!')
+  newState.currentProblemIndex++
+  console.log('➡️ New problem index:', newState.currentProblemIndex)
+  
+  // Check if this specific player is finished
+  console.log(`🔍 Player ${playerId} completion check:`, {
+    currentIndex: newState.currentProblemIndex,
+    problemsLength: newState.problems.length,
+    isFinished: newState.currentProblemIndex >= newState.problems.length
   })
   
-  if (newState.player1Answers.length >= requiredAnswers && 
-      newState.player2Answers.length >= requiredAnswers) {
-    console.log('✅ Both players answered, advancing to next question!')
-    newState.currentProblemIndex++
-    console.log('➡️ New problem index:', newState.currentProblemIndex)
-    
-    // Check if game is finished
-    if (newState.currentProblemIndex >= newState.problems.length) {
-      console.log('🏁 Game finished!')
-      newState.gameEndTime = Date.now()
+  if (newState.currentProblemIndex >= newState.problems.length) {
+    console.log(`🏁 Player ${playerId} finished!`)
+    newState.gameEndTime = Date.now()
+    // Only mark the current player as finished
+    if (playerId === 'player1') {
       newState.player1Finished = true
+      console.log('✅ Marked player1 as finished')
+    } else {
       newState.player2Finished = true
-      newState.winner = determineWinner(newState)
+      console.log('✅ Marked player2 as finished')
     }
-  } else {
-    console.log('⏳ Waiting for both players to answer...')
+    newState.winner = 'draw' // Will be calculated properly by calculateMultiplayerResult
+    
+    console.log('🏁 Player finished state:', {
+      player1Finished: newState.player1Finished,
+      player2Finished: newState.player2Finished,
+      currentIndex: newState.currentProblemIndex,
+      problemsLength: newState.problems.length
+    })
   }
   
   return newState
@@ -633,7 +653,7 @@ function calculatePlayerResult(answers: PlayerAnswer[], problems: MathProblem[])
 } {
   const correctAnswers = answers.filter(a => a.isCorrect)
   const problemsSolved = correctAnswers.length
-  const accuracy = answers.length > 0 ? (problemsSolved / answers.length) * 100 : 0
+  const accuracy = problems.length > 0 ? (problemsSolved / problems.length) * 100 : 0
   const totalTime = answers.reduce((sum, a) => sum + a.timeSpent, 0)
   
   // Calculate final score
@@ -667,33 +687,84 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
   const player1Result = calculatePlayerResult(gameState.player1Answers, gameState.problems)
   const player2Result = calculatePlayerResult(gameState.player2Answers, gameState.problems)
   
-  let winner: 'player1' | 'player2' | 'draw' = 'draw'
-  let winReason: 'score' | 'time' | 'accuracy' = 'score'
+  // Calculate composite scores that balance multiple factors
+  const calculateCompositeScore = (result: PlayerResult) => {
+    // Base score (0-1000 points)
+    const baseScore = result.score
+    
+    // Accuracy bonus (0-200 points) - rewards high accuracy
+    const accuracyBonus = result.problemsSolved > 0 ? Math.round(result.accuracy * 200) : 0
+    
+    // Speed bonus (0-150 points) - rewards faster completion
+    // Faster time = higher bonus (inverse relationship)
+    const maxTime = 300 // 30 seconds per problem * 10 problems (in seconds)
+    const speedBonus = result.totalTime > 0 ? Math.round(Math.max(0, (maxTime - result.totalTime) / maxTime * 150)) : 0
+    
+    // Consistency bonus (0-100 points) - rewards consistent performance
+    // Based on streak and avoiding long gaps between correct answers
+    const consistencyBonus = result.problemsSolved > 0 ? Math.round(Math.min(100, result.streak * 10)) : 0
+    
+    // Completion bonus (0-50 points) - rewards finishing all problems
+    const completionBonus = result.problemsSolved === gameState.problems.length ? 50 : 0
+    
+    const compositeScore = baseScore + accuracyBonus + speedBonus + consistencyBonus + completionBonus
+    
+    return {
+      compositeScore,
+      breakdown: {
+        baseScore,
+        accuracyBonus,
+        speedBonus,
+        consistencyBonus,
+        completionBonus
+      }
+    }
+  }
   
-  // Determine winner and reason
-  if (player1Result.score > player2Result.score) {
+  const player1Composite = calculateCompositeScore(player1Result)
+  const player2Composite = calculateCompositeScore(player2Result)
+  
+  let winner: 'player1' | 'player2' | 'draw' = 'draw'
+  let winReason: 'score' | 'composite' | 'accuracy' | 'time' | 'consistency' = 'composite'
+  
+  // Determine winner based on composite score
+  if (player1Composite.compositeScore > player2Composite.compositeScore) {
     winner = 'player1'
-    winReason = 'score'
-  } else if (player2Result.score > player1Result.score) {
+    winReason = 'composite'
+  } else if (player2Composite.compositeScore > player1Composite.compositeScore) {
     winner = 'player2'
-    winReason = 'score'
-  } else if (player1Result.accuracy > player2Result.accuracy) {
-    winner = 'player1'
-    winReason = 'accuracy'
-  } else if (player2Result.accuracy > player1Result.accuracy) {
-    winner = 'player2'
-    winReason = 'accuracy'
-  } else if (player1Result.totalTime < player2Result.totalTime) {
-    winner = 'player1'
-    winReason = 'time'
-  } else if (player2Result.totalTime < player1Result.totalTime) {
-    winner = 'player2'
-    winReason = 'time'
+    winReason = 'composite'
+  } else {
+    // If composite scores are tied, fall back to individual factors
+    if (player1Result.accuracy > player2Result.accuracy) {
+      winner = 'player1'
+      winReason = 'accuracy'
+    } else if (player2Result.accuracy > player1Result.accuracy) {
+      winner = 'player2'
+      winReason = 'accuracy'
+    } else if (player1Result.totalTime < player2Result.totalTime) {
+      winner = 'player1'
+      winReason = 'time'
+    } else if (player2Result.totalTime < player1Result.totalTime) {
+      winner = 'player2'
+      winReason = 'time'
+    } else {
+      winner = 'draw'
+      winReason = 'composite'
+    }
   }
   
   return {
-    player1Result,
-    player2Result,
+    player1Result: {
+      ...player1Result,
+      compositeScore: player1Composite.compositeScore,
+      scoreBreakdown: player1Composite.breakdown
+    },
+    player2Result: {
+      ...player2Result,
+      compositeScore: player2Composite.compositeScore,
+      scoreBreakdown: player2Composite.breakdown
+    },
     winner,
     winReason
   }
