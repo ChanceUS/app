@@ -1,11 +1,14 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calculator, Grid3X3, Brain, Trophy, Users, Zap } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 const games = [
   {
-    id: "math-blitz",
+    id: "d0c5fda9-ec91-46b4-be62-cba48b398168", // Math Blitz game ID
     name: "Math Blitz",
     description: "Lightning-fast arithmetic challenges",
     icon: Calculator,
@@ -15,8 +18,8 @@ const games = [
     maxBet: 500,
   },
   {
-    id: "connect-4",
-    name: "Connect 4",
+    id: "69bf26d2-110b-40d9-b20a-d5cfab14d133", // Actual 4 In a Row game ID
+    name: "4 In a Row",
     description: "Strategic four-in-a-row battles",
     icon: Grid3X3,
     color: "from-yellow-500 to-yellow-600",
@@ -25,7 +28,7 @@ const games = [
     maxBet: 1000,
   },
   {
-    id: "trivia",
+    id: "trivia", // Placeholder - replace with actual Trivia game ID
     name: "Trivia Challenge",
     description: "Test your knowledge across categories",
     icon: Brain,
@@ -37,6 +40,14 @@ const games = [
 ]
 
 export default function QuickActions() {
+  const router = useRouter()
+
+  const handleQuickMatch = (game: any) => {
+    console.log('🎯 Quick match clicked for:', game.name)
+    // Redirect to the create match page where users can choose bet amount and match type
+    router.push(`/games/${game.id}/create`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -70,13 +81,11 @@ export default function QuickActions() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  asChild
+                  onClick={() => handleQuickMatch(game)}
                   className={`flex-1 bg-gradient-to-r ${game.color} hover:${game.hoverColor} text-black font-semibold`}
                 >
-                  <Link href={`/games/${game.id}/play`}>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Quick Match
-                  </Link>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Quick Match
                 </Button>
                 <Button
                   asChild

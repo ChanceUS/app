@@ -8,14 +8,19 @@ export const isSupabaseConfigured =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0
 
 // Create a singleton instance of the Supabase client for Client Components
-// Enable real-time functionality
+// Enable real-time functionality with proper configuration
 export const supabase = createClientComponentClient({
   realtime: {
     params: {
-      eventsPerSecond: 10
+      eventsPerSecond: 5, // Reduced to prevent binding issues
+      heartbeatIntervalMs: 30000, // Add heartbeat
+      reconnectAfterMs: (tries: number) => Math.min(tries * 1000, 30000) // Exponential backoff
     }
   }
 })
+
+// Export createClient function for compatibility
+export const createClient = () => supabase
 
 // Database types
 export interface User {

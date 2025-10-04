@@ -17,7 +17,7 @@ const recentMatches = [
   },
   {
     id: "2",
-    game: "Connect 4",
+    game: "4 In a Row",
     opponent: "StrategyKing",
     result: "lost",
     tokens: -75,

@@ -137,7 +137,7 @@ export default function MatchHistoryTable({ matches, currentUserId }: MatchHisto
                     <div className="flex items-center space-x-4">
                       <div className="text-2xl">
                         {match.games.name === "Math Blitz" && "🧮"}
-                        {match.games.name === "Connect 4" && "🔴"}
+                        {match.games.name === "4 In a Row" && "🔴"}
                         {match.games.name === "Trivia Challenge" && "🧠"}
                       </div>
                       <div>

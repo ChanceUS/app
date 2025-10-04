@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Grid3X3, User, Trophy } from "lucide-react"
-import { createEmptyBoard, dropPiece, checkWinner, type Connect4Board, type Connect4Cell } from "@/lib/game-logic"
+import { createEmptyBoard, dropPiece, checkWinner, type FourInARowBoard, type FourInARowCell } from "@/lib/game-logic"
 
 interface ConnectFourProps {
   onGameEnd: (winner: "player1" | "player2" | "draw") => void
@@ -24,8 +24,19 @@ export default function ConnectFour({
   gameData, 
   onMove 
 }: ConnectFourProps) {
-  const [board, setBoard] = useState<Connect4Board>(createEmptyBoard())
+  const [board, setBoard] = useState<FourInARowBoard>(createEmptyBoard())
   const [gameWinner, setGameWinner] = useState<"player1" | "player2" | "draw" | null>(null)
+
+  // Debug props (only log when props change)
+  useEffect(() => {
+    console.log('🎮 Connect 4 component props:', {
+      isActive,
+      currentPlayer,
+      isMyTurn,
+      gameData,
+      hasOnMove: !!onMove
+    })
+  }, [isActive, currentPlayer, isMyTurn, gameData, onMove])
 
   // Initialize board from game data or create empty board
   useEffect(() => {
@@ -45,11 +56,29 @@ export default function ConnectFour({
     }
   }, [board, gameWinner, onGameEnd])
 
-  const handleColumnClick = (column: number) => {
-    if (!isActive || !isMyTurn || gameWinner) return
+  const handleColumnClick = useCallback((column: number) => {
+    console.log('🎯 Connect 4 column click:', {
+      column,
+      isActive,
+      isMyTurn,
+      gameWinner,
+      currentPlayer
+    })
+    
+    if (!isActive || !isMyTurn || gameWinner) {
+      console.log('❌ Connect 4 click blocked:', {
+        isActive,
+        isMyTurn,
+        gameWinner
+      })
+      return
+    }
 
     const newBoard = dropPiece(board, column, currentPlayer)
-    if (!newBoard) return // Column is full
+    if (!newBoard) {
+      console.log('❌ Column is full:', column)
+      return // Column is full
+    }
 
     // Update local state immediately for responsive UI
     setBoard(newBoard)
@@ -70,9 +99,9 @@ export default function ConnectFour({
       setGameWinner(winner)
       onGameEnd(winner)
     }
-  }
+  }, [isActive, isMyTurn, gameWinner, currentPlayer, board, onMove, onGameEnd])
 
-  const getCellColor = (cell: Connect4Cell) => {
+  const getCellColor = (cell: FourInARowCell) => {
     switch (cell) {
       case "player1":
         return "bg-cyan-500"
@@ -93,7 +122,7 @@ export default function ConnectFour({
         <div className="flex items-center justify-between">
           <CardTitle className="text-white flex items-center">
             <Grid3X3 className="mr-2 h-5 w-5 text-yellow-400" />
-            Connect 4
+            4 In a Row
           </CardTitle>
           <div className="flex items-center space-x-2">
             <Badge
@@ -135,16 +164,19 @@ export default function ConnectFour({
         <div className="space-y-2">
           {/* Column buttons */}
           <div className="grid grid-cols-7 gap-1 mb-4">
-            {Array.from({ length: 7 }, (_, col) => (
-              <Button
-                key={col}
-                onClick={() => handleColumnClick(col)}
-                disabled={!isActive || !isMyTurn || gameWinner !== null}
-                className="h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ↓
-              </Button>
-            ))}
+            {useMemo(() => Array.from({ length: 7 }, (_, col) => {
+              const isDisabled = !isActive || !isMyTurn || gameWinner !== null
+              return (
+                <Button
+                  key={col}
+                  onClick={() => handleColumnClick(col)}
+                  disabled={isDisabled}
+                  className="h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ↓
+                </Button>
+              )
+            }), [isActive, isMyTurn, gameWinner, handleColumnClick])}
           </div>
 
           {/* Game board */}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import Header from "@/components/navigation/header"
 import CreateMatchForm from "@/components/games/create-match-form"
 import MathBlitz from "@/components/games/math-blitz"
+import TriviaChallenge from "@/components/games/trivia-challenge"
 
 interface CreateMatchPageProps {
   params: {
@@ -11,7 +12,7 @@ interface CreateMatchPageProps {
 }
 
 export default async function CreateMatchPage({ params }: CreateMatchPageProps) {
-  const resolvedParams = await params
+  const resolvedParams = params
   
   if (!isSupabaseConfigured) {
     return (
@@ -22,6 +23,28 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
   }
 
   const supabase = await createClient()
+  
+  // Test database connection
+  console.log("🔍 Testing database connection...")
+  const { data: testData, error: testError } = await supabase.from("games").select("count").limit(1)
+  console.log("🔍 Database test result:", { testData, testError })
+  
+  if (testError) {
+    console.error("❌ Database connection failed:", testError)
+    return (
+      <div className="min-h-screen bg-black">
+        <Header user={user} />
+        <div className="flex items-center justify-center p-4 pt-20">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-red-400 mb-4">Database Connection Error</h1>
+            <p className="text-gray-400 mb-4">Unable to connect to the database.</p>
+            <p className="text-gray-400 mb-4">Error: {testError.message}</p>
+            <a href="/games" className="text-blue-400 hover:text-blue-300">Back to Games</a>
+          </div>
+        </div>
+      </div>
+    )
+  }
   
   const {
     data: { user: authUser },
@@ -38,14 +61,52 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
   }
 
   // Get game details
-  const { data: game } = await supabase.from("games").select("*").eq("id", resolvedParams.gameId).single()
+  console.log("🔍 Looking for game with ID:", resolvedParams.gameId)
+  console.log("🔍 Game ID type:", typeof resolvedParams.gameId)
+  console.log("🔍 Game ID length:", resolvedParams.gameId?.length)
   
-  if (!game) {
+  let game: any = null
+  
+  try {
+    const { data: gameData, error: gameError } = await supabase.from("games").select("*").eq("id", resolvedParams.gameId).single()
+    
+    console.log("🔍 Game query result:", { gameData, gameError })
+    
+    if (gameError) {
+      console.error("❌ Error fetching game:", {
+        code: gameError.code,
+        message: gameError.message,
+        details: gameError.details,
+        hint: gameError.hint,
+        fullError: gameError
+      })
+      
+      // Let's see what games exist
+      const { data: allGames, error: allGamesError } = await supabase.from("games").select("*")
+      console.log("🔍 All games in database:", { allGames, allGamesError })
+      
+      redirect("/games")
+    }
+    
+    if (!gameData) {
+      console.error("❌ Game not found with ID:", resolvedParams.gameId)
+      
+      // Let's see what games exist
+      const { data: allGames } = await supabase.from("games").select("*")
+      console.log("🔍 All games in database:", allGames)
+      
+      redirect("/games")
+    }
+    
+    game = gameData
+    console.log("✅ Found game:", game)
+  } catch (err) {
+    console.error("❌ Exception during game fetch:", err)
     redirect("/games")
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-black">
       <Header user={user} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -63,7 +124,7 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
 
           {/* Game Preview */}
           <div>
-            <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+            <div className="bg-gray-900/50 border-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-bold text-white mb-4">Game Preview</h2>
               <p className="text-gray-400 mb-6">
                 This is what you'll be playing. Practice while waiting for an opponent!
@@ -77,19 +138,17 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
               )}
               
               {/* Show other games when implemented */}
-              {game.name === "Connect 4" && (
+              {game.name === "4 In a Row" && (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">🔴</div>
-                  <h3 className="text-white text-lg font-semibold">Connect 4</h3>
+                  <h3 className="text-white text-lg font-semibold">4 In a Row</h3>
                   <p className="text-gray-400">Game preview coming soon</p>
                 </div>
               )}
               
               {game.name === "Trivia Challenge" && (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">🧠</div>
-                  <h3 className="text-white text-lg font-semibold">Trivia Challenge</h3>
-                  <p className="text-gray-400">Game preview coming soon</p>
+                <div className="scale-90 origin-top">
+                  <TriviaChallenge />
                 </div>
               )}
             </div>

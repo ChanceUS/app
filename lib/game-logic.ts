@@ -343,17 +343,17 @@ export function initializeGameState(): GameState {
   }
 }
 
-// Connect 4 game logic
-export type Connect4Cell = "empty" | "player1" | "player2"
-export type Connect4Board = Connect4Cell[][]
+// 4 In a Row game logic
+export type FourInARowCell = "empty" | "player1" | "player2"
+export type FourInARowBoard = FourInARowCell[][]
 
-export function createEmptyBoard(): Connect4Board {
+export function createEmptyBoard(): FourInARowBoard {
   return Array(6)
     .fill(null)
     .map(() => Array(7).fill("empty"))
 }
 
-export function dropPiece(board: Connect4Board, column: number, player: "player1" | "player2"): Connect4Board | null {
+export function dropPiece(board: FourInARowBoard, column: number, player: "player1" | "player2"): FourInARowBoard | null {
   const newBoard = board.map((row) => [...row])
 
   // Find the lowest empty row in the column
@@ -367,7 +367,7 @@ export function dropPiece(board: Connect4Board, column: number, player: "player1
   return null // Column is full
 }
 
-export function checkWinner(board: Connect4Board): "player1" | "player2" | "draw" | null {
+export function checkWinner(board: FourInARowBoard): "player1" | "player2" | "draw" | null {
   // Check horizontal
   for (let row = 0; row < 6; row++) {
     for (let col = 0; col < 4; col++) {
@@ -684,11 +684,36 @@ function calculatePlayerResult(answers: PlayerAnswer[], problems: MathProblem[])
 }
 
 export function calculateMultiplayerResult(gameState: MultiplayerGameState): MultiplayerResult {
+  console.log('🏆 ===== CALCULATING FINAL RESULT =====')
+  console.log('📊 Game State:', {
+    player1Answers: gameState.player1Answers.length,
+    player2Answers: gameState.player2Answers.length,
+    totalProblems: gameState.problems.length,
+    player1Finished: gameState.player1Finished,
+    player2Finished: gameState.player2Finished
+  })
+  
   const player1Result = calculatePlayerResult(gameState.player1Answers, gameState.problems)
   const player2Result = calculatePlayerResult(gameState.player2Answers, gameState.problems)
   
+  console.log('🎯 Player 1 Basic Results:', {
+    score: player1Result.score,
+    problemsSolved: player1Result.problemsSolved,
+    accuracy: `${(player1Result.accuracy * 100).toFixed(1)}%`,
+    totalTime: `${player1Result.totalTime.toFixed(1)}s`,
+    streak: player1Result.streak
+  })
+  
+  console.log('🎯 Player 2 Basic Results:', {
+    score: player2Result.score,
+    problemsSolved: player2Result.problemsSolved,
+    accuracy: `${(player2Result.accuracy * 100).toFixed(1)}%`,
+    totalTime: `${player2Result.totalTime.toFixed(1)}s`,
+    streak: player2Result.streak
+  })
+  
   // Calculate composite scores that balance multiple factors
-  const calculateCompositeScore = (result: PlayerResult) => {
+  const calculateCompositeScore = (result: PlayerResult, playerName: string) => {
     // Base score (0-1000 points)
     const baseScore = result.score
     
@@ -709,6 +734,15 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
     
     const compositeScore = baseScore + accuracyBonus + speedBonus + consistencyBonus + completionBonus
     
+    console.log(`📈 ${playerName} Score Breakdown:`, {
+      baseScore,
+      accuracyBonus,
+      speedBonus,
+      consistencyBonus,
+      completionBonus,
+      totalCompositeScore: compositeScore
+    })
+    
     return {
       compositeScore,
       breakdown: {
@@ -721,40 +755,52 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
     }
   }
   
-  const player1Composite = calculateCompositeScore(player1Result)
-  const player2Composite = calculateCompositeScore(player2Result)
+  const player1Composite = calculateCompositeScore(player1Result, 'Player 1')
+  const player2Composite = calculateCompositeScore(player2Result, 'Player 2')
   
   let winner: 'player1' | 'player2' | 'draw' = 'draw'
   let winReason: 'score' | 'composite' | 'accuracy' | 'time' | 'consistency' = 'composite'
+  
+  console.log('🥊 Winner Determination:')
+  console.log(`   Player 1 Composite Score: ${player1Composite.compositeScore}`)
+  console.log(`   Player 2 Composite Score: ${player2Composite.compositeScore}`)
   
   // Determine winner based on composite score
   if (player1Composite.compositeScore > player2Composite.compositeScore) {
     winner = 'player1'
     winReason = 'composite'
+    console.log('🏆 Winner: Player 1 (Higher Composite Score)')
   } else if (player2Composite.compositeScore > player1Composite.compositeScore) {
     winner = 'player2'
     winReason = 'composite'
+    console.log('🏆 Winner: Player 2 (Higher Composite Score)')
   } else {
+    console.log('🤝 Composite scores tied, checking tiebreakers...')
     // If composite scores are tied, fall back to individual factors
     if (player1Result.accuracy > player2Result.accuracy) {
       winner = 'player1'
       winReason = 'accuracy'
+      console.log(`🏆 Winner: Player 1 (Higher Accuracy: ${(player1Result.accuracy * 100).toFixed(1)}% vs ${(player2Result.accuracy * 100).toFixed(1)}%)`)
     } else if (player2Result.accuracy > player1Result.accuracy) {
       winner = 'player2'
       winReason = 'accuracy'
+      console.log(`🏆 Winner: Player 2 (Higher Accuracy: ${(player2Result.accuracy * 100).toFixed(1)}% vs ${(player1Result.accuracy * 100).toFixed(1)}%)`)
     } else if (player1Result.totalTime < player2Result.totalTime) {
       winner = 'player1'
       winReason = 'time'
+      console.log(`🏆 Winner: Player 1 (Faster Time: ${player1Result.totalTime.toFixed(1)}s vs ${player2Result.totalTime.toFixed(1)}s)`)
     } else if (player2Result.totalTime < player1Result.totalTime) {
       winner = 'player2'
       winReason = 'time'
+      console.log(`🏆 Winner: Player 2 (Faster Time: ${player2Result.totalTime.toFixed(1)}s vs ${player1Result.totalTime.toFixed(1)}s)`)
     } else {
       winner = 'draw'
       winReason = 'composite'
+      console.log('🤝 Result: Draw (All factors tied)')
     }
   }
   
-  return {
+  const finalResult = {
     player1Result: {
       ...player1Result,
       compositeScore: player1Composite.compositeScore,
@@ -768,4 +814,15 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
     winner,
     winReason
   }
+  
+  console.log('🎉 ===== FINAL RESULT =====')
+  console.log('🏆 Winner:', winner)
+  console.log('📊 Win Reason:', winReason)
+  console.log('📈 Final Scores:', {
+    player1: finalResult.player1Result.compositeScore,
+    player2: finalResult.player2Result.compositeScore
+  })
+  console.log('=====================================')
+  
+  return finalResult
 }

@@ -20,7 +20,7 @@ export async function signIn(prevState: any, formData: FormData) {
     return { error: "Email and password are required" }
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
@@ -41,25 +41,40 @@ export async function signIn(prevState: any, formData: FormData) {
 }
 
 export async function signInWithGoogle() {
-  const cookieStore = cookies()
+  try {
+    const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
-  const redirectUrl = getCallbackUrl()
+    const redirectUrl = getCallbackUrl()
+    console.log("Google OAuth redirect URL:", redirectUrl)
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: redirectUrl,
-    },
-  })
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+      },
+    })
 
-  if (error) {
-    console.error("Google sign-in error:", error)
-    redirect("/auth/login?error=google_signin_failed")
-  }
+    if (error) {
+      console.error("Google sign-in error:", error)
+      redirect("/auth/login?error=" + encodeURIComponent(error.message))
+    }
 
-  if (data.url) {
-    redirect(data.url)
+    if (data?.url) {
+      console.log("Redirecting to Google OAuth:", data.url)
+      redirect(data.url)
+    } else {
+      console.error("No OAuth URL returned from Supabase")
+      redirect("/auth/login?error=no_oauth_url")
+    }
+  } catch (error: any) {
+    // Check if this is a redirect error (which is expected)
+    if (error.message === "NEXT_REDIRECT") {
+      // This is actually a successful redirect, not an error
+      throw error
+    }
+    console.error("Google sign-in exception:", error)
+    redirect("/auth/login?error=" + encodeURIComponent("OAuth configuration error"))
   }
 }
 
@@ -80,7 +95,7 @@ export async function signUp(prevState: any, formData: FormData) {
     return { error: "Email, password, and username are required" }
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
@@ -109,7 +124,7 @@ export async function signUp(prevState: any, formData: FormData) {
 
 // Sign out action
 export async function signOut() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   await supabase.auth.signOut()

@@ -42,7 +42,7 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
   const [state, formAction] = useActionState(updateProfile, null)
 
   return (
-    <Card className="bg-gray-900/50 border-gray-800">
+    <Card className="bg-gray-900/80 border-gray-800">
       <CardHeader>
         <CardTitle className="text-white flex items-center">
           <User className="mr-2 h-5 w-5 text-cyan-400" />

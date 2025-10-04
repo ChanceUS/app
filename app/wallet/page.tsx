@@ -50,10 +50,13 @@ export default async function WalletPage() {
   const totalSpent = transactions.filter((t) => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0)
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 relative">
       <Header user={user} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Wallet</h1>
@@ -62,7 +65,7 @@ export default async function WalletPage() {
 
         {/* Wallet Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gray-900/50 border-yellow-500/20 card-hover">
+          <Card className="bg-gray-900/80 border-yellow-500/20 card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-400">Current Balance</CardTitle>
               <Wallet className="h-4 w-4 text-yellow-400" />
@@ -73,7 +76,7 @@ export default async function WalletPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gray-900/50 border-green-500/20 card-hover">
+          <Card className="bg-gray-900/80 border-green-500/20 card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-400">Total Earned</CardTitle>
               <ArrowUpRight className="h-4 w-4 text-green-400" />
@@ -84,7 +87,7 @@ export default async function WalletPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gray-900/50 border-red-500/20 card-hover">
+          <Card className="bg-gray-900/80 border-red-500/20 card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-400">Total Spent</CardTitle>
               <ArrowDownLeft className="h-4 w-4 text-red-400" />
@@ -95,7 +98,7 @@ export default async function WalletPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gray-900/50 border-cyan-500/20 card-hover">
+          <Card className="bg-gray-900/80 border-cyan-500/20 card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-400">Net Profit</CardTitle>
               <TrendingUp className="h-4 w-4 text-cyan-400" />

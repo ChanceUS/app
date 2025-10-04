@@ -91,24 +91,24 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
 
   const gameIcons = {
     "Math Blitz": "🧮",
-    "Connect 4": "🔴",
+    "4 In a Row": "🔴",
     "Trivia Challenge": "🧠",
   }
 
   const gameColors = {
     "Math Blitz": "text-cyan-400",
-    "Connect 4": "text-yellow-400", 
+    "4 In a Row": "text-yellow-400", 
     "Trivia Challenge": "text-purple-400",
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-black">
       <Header user={user} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Navigation */}
         <div className="mb-6">
-          <Button asChild variant="outline" className="border-gray-700 text-gray-300 hover:text-white bg-transparent">
+          <Button asChild variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-800">
             <Link href="/games">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Games
@@ -245,7 +245,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
                         className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold"
                       >
                         <Link href={`/games/match/${match.id}`}>
-                          Join Match
+                          View Match
                         </Link>
                       </Button>
                     </div>

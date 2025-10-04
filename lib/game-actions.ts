@@ -196,6 +196,7 @@ export async function joinMatch(matchId: string) {
 
 // Cancel a match (only if you're the creator and no one has joined)
 export async function cancelMatch(matchId: string) {
+  console.log("🚫 cancelMatch called with matchId:", matchId)
   const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
@@ -204,31 +205,42 @@ export async function cancelMatch(matchId: string) {
       data: { user },
     } = await supabase.auth.getUser()
 
+    console.log("🚫 User authenticated:", !!user, "User ID:", user?.id)
+
     if (!user) {
       throw new Error("User not authenticated")
     }
 
     // Get match details
-    const { data: matchData } = await supabase
+    console.log("🚫 Looking for match with ID:", matchId, "and player1_id:", user.id)
+    const { data: matchData, error: matchError } = await supabase
       .from("matches")
       .select("*")
       .eq("id", matchId)
       .eq("player1_id", user.id)
-      .eq("status", "waiting")
+      .in("status", ["waiting", "in_progress"])
       .single()
 
+    console.log("🚫 Match query result:", { matchData, matchError })
+
     if (!matchData) {
+      console.log("🚫 Match not found or cannot be cancelled")
       throw new Error("Match not found or cannot be cancelled")
     }
 
     // Update match status to cancelled
+    console.log("🚫 Updating match status to cancelled...")
     const { error: updateError } = await supabase.from("matches").update({ status: "cancelled" }).eq("id", matchId)
 
+    console.log("🚫 Update result:", { updateError })
+
     if (updateError) {
+      console.error("🚫 Failed to update match status:", updateError)
       throw new Error("Failed to cancel match")
     }
 
     // Refund the bet to player 1
+    console.log("🚫 Processing refund for amount:", matchData.bet_amount)
     const { error: refundError } = await supabase.from("transactions").insert({
       user_id: user.id,
       match_id: matchId,
@@ -237,14 +249,18 @@ export async function cancelMatch(matchId: string) {
       description: `Match cancelled - refund of ${matchData.bet_amount} tokens`,
     })
 
+    console.log("🚫 Refund result:", { refundError })
+
     if (refundError) {
-      console.error("Refund error:", refundError)
+      console.error("🚫 Refund error:", refundError)
       throw new Error("Failed to process refund")
     }
 
+    console.log("🚫 Revalidating paths...")
     revalidatePath("/games")
     revalidatePath("/matches")
     
+    console.log("🚫 Cancel match successful!")
     // Return success instead of redirect for server action compatibility
     return { success: true }
   } catch (error) {

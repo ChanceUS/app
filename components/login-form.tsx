@@ -36,9 +36,10 @@ function SubmitButton() {
 }
 
 /** Google SSO button (plain button to guarantee a white background) */
-function GoogleSignInButton() {
+function GoogleSignInButton({ redirectUrl }: { redirectUrl?: string }) {
   return (
     <form action={signInWithGoogle} className="w-full">
+      {redirectUrl && <input type="hidden" name="redirect" value={redirectUrl} />}
       <button
         type="submit"
         className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-4 text-base font-semibold text-gray-900 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FFA500] focus:ring-offset-2 focus:ring-offset-black"
@@ -67,21 +68,39 @@ function GoogleSignInButton() {
   )
 }
 
-export default function LoginForm() {
+interface LoginFormProps {
+  redirectUrl?: string
+}
+
+export default function LoginForm({ redirectUrl }: LoginFormProps) {
   const router = useRouter()
   const [state, formAction] = useActionState(signIn, null)
 
   useEffect(() => {
     if (state?.success) {
-      router.push("/dashboard")
+      const targetUrl = redirectUrl || "/dashboard"
+      console.log("🔍 DEBUG: Login successful, redirecting to:", targetUrl)
+      console.log("🔍 DEBUG: Original redirectUrl:", redirectUrl)
+      router.push(targetUrl)
     }
-  }, [state, router])
+  }, [state, router, redirectUrl])
+
+  // Check for URL error parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const error = urlParams.get('error')
+    if (error) {
+      console.error("Login error from URL:", error)
+      // Show error message to user
+      alert(`Login Error: ${error}`)
+    }
+  }, [])
 
   return (
     <Card className="w-full max-w-md bg-black border-gray-800">
       <CardHeader className="text-center space-y-4">
         <div className="flex justify-center">
-          <img src="/chanceus-logo.png" alt="ChanceUS" className="h-16" />
+          <img src="/chanceus-eagle.png" alt="ChanceUS" className="h-16" />
         </div>
         <CardTitle className="text-3xl font-bold text-white">Welcome Back</CardTitle>
         <CardDescription className="text-gray-400 text-lg">Ready to test your skills and win big?</CardDescription>

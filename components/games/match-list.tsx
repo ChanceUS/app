@@ -13,6 +13,7 @@ interface Match {
   id: string
   bet_amount: number
   created_at: string
+  player1_id: string
   games: {
     name: string
   }
@@ -59,18 +60,27 @@ export default function MatchList({ matches, currentUserId, title, description }
   const handleCancelMatch = async (matchId: string) => {
     try {
       setCancellingMatch(matchId)
-      console.log(`Attempting to cancel match ${matchId}`)
+      console.log(`🎯 Attempting to cancel match ${matchId} for user ${currentUserId}`)
+      console.log(`🎯 Current user ID:`, currentUserId)
+      console.log(`🎯 Match ID:`, matchId)
+      
       const result = await cancelMatch(matchId)
-      console.log(`Cancel result:`, result)
+      console.log(`🎯 Cancel result:`, result)
+      
       if (result?.success) {
-        // Force a hard refresh to ensure the UI updates
-        window.location.reload()
+        console.log(`✅ Match ${matchId} cancelled successfully, redirecting to games...`)
+        // Redirect to games page after successful cancellation
+        window.location.href = "/games"
       } else {
-        console.error("Cancel failed:", result)
+        console.error("❌ Cancel failed:", result)
         alert("Failed to cancel match. It may have already been joined or cancelled.")
       }
     } catch (error) {
-      console.error("Failed to cancel match:", error)
+      console.error("❌ Failed to cancel match:", error)
+      console.error("❌ Error details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined
+      })
       alert("Failed to cancel match: " + (error instanceof Error ? error.message : "Unknown error"))
     } finally {
       setCancellingMatch(null)
@@ -122,7 +132,7 @@ export default function MatchList({ matches, currentUserId, title, description }
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {match.player1?.username === currentUserId ? (
+                  {match.player1_id === currentUserId ? (
                     <Button
                       variant="outline"
                       size="sm"

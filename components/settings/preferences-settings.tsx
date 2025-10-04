@@ -5,7 +5,6 @@ import { useFormStatus } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Settings, Save } from "lucide-react"
 import { updatePreferences } from "@/lib/settings-actions"
 
@@ -37,7 +36,7 @@ export default function PreferencesSettings() {
   const [state, formAction] = useActionState(updatePreferences, null)
 
   return (
-    <Card className="bg-gray-900/50 border-gray-800">
+    <Card className="bg-gray-900/80 border-gray-800">
       <CardHeader>
         <CardTitle className="text-white flex items-center">
           <Settings className="mr-2 h-5 w-5 text-yellow-400" />
@@ -90,25 +89,6 @@ export default function PreferencesSettings() {
                   <p className="text-gray-400 text-sm">Play sounds during gameplay</p>
                 </div>
                 <Switch name="soundEffects" defaultChecked />
-              </div>
-              <div className="space-y-2">
-                <label className="text-gray-300 font-medium">Theme</label>
-                <Select name="theme" defaultValue="dark">
-                  <SelectTrigger className="bg-gray-800/50 border-gray-700 text-white focus:border-yellow-500">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 border-gray-800">
-                    <SelectItem value="dark" className="text-white hover:bg-gray-800">
-                      Dark Theme
-                    </SelectItem>
-                    <SelectItem value="light" className="text-white hover:bg-gray-800">
-                      Light Theme
-                    </SelectItem>
-                    <SelectItem value="auto" className="text-white hover:bg-gray-800">
-                      Auto (System)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>

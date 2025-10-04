@@ -127,6 +127,18 @@ export async function joinMatchmakingQueue(
     
     console.log(`🔍 All waiting queues:`, allQueues)
     
+    // Also check with user join to see if the issue is in the join
+    const { data: allQueuesWithUsers } = await supabase
+      .from("matchmaking_queue")
+      .select(`
+        *,
+        users (id, username, display_name)
+      `)
+      .eq("status", "waiting")
+      .gt("expires_at", new Date().toISOString())
+    
+    console.log(`🔍 All waiting queues with users:`, allQueuesWithUsers)
+    
     const { data: existingQueues, error: queueError } = await supabase
       .from("matchmaking_queue")
       .select("*")
@@ -241,7 +253,10 @@ export async function joinMatchmakingQueue(
         match_type: matchType,
         expires_at: expiresAt.toISOString()
       })
-      .select()
+      .select(`
+        *,
+        users (id, username, display_name)
+      `)
       .single()
 
     if (createQueueError) {
@@ -250,6 +265,7 @@ export async function joinMatchmakingQueue(
     }
 
     console.log(`✅ Created queue entry:`, queueEntry)
+    console.log(`✅ Queue entry user data:`, queueEntry.users)
 
     // Start the 3-minute timer
     setTimeout(async () => {

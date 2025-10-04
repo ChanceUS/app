@@ -55,7 +55,7 @@ export default async function GamePlayPage({ params }: GamePlayPageProps) {
     switch (game.name.toLowerCase()) {
       case "math blitz":
         return <MathBlitz />
-      case "connect 4":
+      case "4 in a row":
         return (
           <ConnectFour
             onGameEnd={(winner) => console.log("Game ended:", winner)}

@@ -13,17 +13,23 @@ interface GameCardProps {
 
 const gameIcons = {
   "Math Blitz": "🧮",
-  "Connect 4": "🔴",
+  "Connect 4": "🎮",
+  "4 In a Row": "🔴",
   "Trivia Challenge": "🧠",
 }
 
 const gameColors = {
   "Math Blitz": {
-    gradient: "from-cyan-500 to-cyan-600",
-    hoverGradient: "from-cyan-600 to-cyan-700",
-    border: "border-cyan-500/20",
+    gradient: "from-blue-500 to-blue-600",
+    hoverGradient: "from-blue-600 to-blue-700",
+    border: "border-blue-500/20",
   },
   "Connect 4": {
+    gradient: "from-red-500 to-red-600",
+    hoverGradient: "from-red-600 to-red-700",
+    border: "border-red-500/20",
+  },
+  "4 In a Row": {
     gradient: "from-yellow-500 to-yellow-600",
     hoverGradient: "from-yellow-600 to-yellow-700",
     border: "border-yellow-500/20",
@@ -37,20 +43,22 @@ const gameColors = {
 
 export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: GameCardProps) {
   const colors = gameColors[game.name as keyof typeof gameColors] || gameColors["Math Blitz"]
+  
+  console.log("🎮 GameCard rendering for:", { id: game.id, name: game.name })
 
   return (
-    <Card className={`bg-gray-900/50 border-gray-800 ${colors.border} card-hover group`}>
-      <CardHeader className="text-center">
+    <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors">
+      <CardHeader className="text-center pb-4">
         <div className="flex justify-center mb-4">
-          <div className="text-6xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
+          <div className="text-5xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
         </div>
-        <CardTitle className="text-white text-2xl">{game.name}</CardTitle>
-        <CardDescription className="text-gray-400 text-lg">{game.description}</CardDescription>
+        <CardTitle className="text-white text-xl mb-2">{game.name}</CardTitle>
+        <CardDescription className="text-gray-400 text-sm">{game.description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {/* Game Stats */}
         <div className="flex justify-between items-center text-sm">
-          <div className="flex items-center text-gray-400">
+          <div className="flex items-center text-green-400">
             <Users className="h-4 w-4 mr-1" />
             <span>{onlineUsers} online</span>
           </div>
@@ -63,7 +71,7 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
         {/* Bet Range */}
         <div className="bg-gray-800/30 p-3 rounded-lg">
           <div className="flex justify-between items-center">
-            <span className="text-gray-400 text-sm">Bet Range:</span>
+            <span className="text-white/80 text-sm">Bet Range:</span>
             <div className="flex items-center space-x-2">
               <Badge variant="outline" className="border-gray-600 text-gray-300">
                 {game.min_bet} min
@@ -79,21 +87,19 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
         <div className="flex gap-3">
           <Button
             asChild
-            className={`flex-1 bg-gradient-to-r ${colors.gradient} hover:${colors.hoverGradient} text-black font-semibold`}
+            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-semibold"
           >
             <Link href={`/games/${game.id}/create`}>
-              <Zap className="mr-2 h-4 w-4" />
               Create Match
             </Link>
           </Button>
           <Button
             asChild
             variant="outline"
-            className="flex-1 border-gray-700 text-gray-300 hover:text-white hover:bg-gray-800 bg-transparent"
+            className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800"
           >
             <Link href={`/games/${game.id}`}>
-              <Users className="mr-2 h-4 w-4" />
-              Join Lobby
+              View Details
             </Link>
           </Button>
         </div>

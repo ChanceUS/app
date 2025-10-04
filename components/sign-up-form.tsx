@@ -72,7 +72,7 @@ export default function SignUpForm() {
     <Card className="w-full max-w-md bg-black border-gray-800">
       <CardHeader className="text-center space-y-4">
         <div className="flex justify-center">
-          <img src="/chanceus-logo.png" alt="ChanceUS" className="h-16" />
+          <img src="/chanceus-eagle.png" alt="ChanceUS" className="h-16" />
         </div>
         <CardTitle className="text-3xl font-bold text-white">Join the Arena</CardTitle>
         <CardDescription className="text-gray-400 text-lg">Create your account and start winning today</CardDescription>

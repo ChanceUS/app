@@ -2,7 +2,6 @@
 
 import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
-import { revalidatePath } from "next/cache"
 
 export async function forceCompleteMatches() {
   const cookieStore = await cookies()
@@ -12,11 +11,16 @@ export async function forceCompleteMatches() {
     console.log('🔄 Force completing matches that should be completed...')
 
     // Find matches that have both players but are still in "waiting" status
+    // Only force complete matches that are older than 5 minutes to avoid completing fresh matches
+    const fiveMinutesAgo = new Date()
+    fiveMinutesAgo.setMinutes(fiveMinutesAgo.getMinutes() - 5)
+    
     const { data: matchesToComplete, error: fetchError } = await supabase
       .from('matches')
       .select('id, player1_id, player2_id, status, created_at')
       .eq('status', 'waiting')
       .not('player2_id', 'is', null)
+      .lt('created_at', fiveMinutesAgo.toISOString()) // Only matches older than 5 minutes
       .order('created_at', { ascending: false })
 
     if (fetchError) {
@@ -51,9 +55,8 @@ export async function forceCompleteMatches() {
       }
     }
 
-    // Revalidate pages to update UI
-    revalidatePath('/games')
-    revalidatePath('/matches')
+    // Note: revalidatePath removed as it can't be called during render
+    // The UI will update on next page refresh or navigation
 
     console.log(`✅ Force completed ${completedCount} matches`)
     return { success: true, count: completedCount }

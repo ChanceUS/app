@@ -8,7 +8,7 @@ This document explains the real-time multiplayer system implemented in ChanceUS,
 ### Components
 1. **`useMatchRealtime` Hook** - Manages real-time subscriptions and match state
 2. **`EnhancedMatchInterface`** - Main interface for real-time multiplayer games
-3. **Game Components** - Updated to work with real-time system (Connect Four, Math Blitz, Trivia Challenge)
+3. **Game Components** - Updated to work with real-time system (4 In a Row, Math Blitz, Trivia Challenge)
 4. **Match Page** - Dedicated page for individual matches
 
 ### Data Flow
@@ -64,7 +64,7 @@ All game components now accept these props:
 - `gameData` - Current game state from database
 - `onMove(moveData)` - Function to send moves to opponent
 
-### Example: Connect Four
+### Example: 4 In a Row
 ```typescript
 const handleColumnClick = (column: number) => {
   if (!isMyTurn) return
@@ -96,7 +96,7 @@ const handleColumnClick = (column: number) => {
 
 ## 🎮 Game Types
 
-### 1. Connect Four
+### 1. 4 In a Row
 - Turn-based gameplay
 - Real-time board synchronization
 - Automatic win detection

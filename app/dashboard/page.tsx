@@ -38,13 +38,16 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-gray-950 relative">
       <Header user={user} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="mb-8 fade-in">
           <div className="flex items-center space-x-4 mb-4">
-            <Image src="/chanceus-eagle.png" alt="ChanceUS Eagle" width={60} height={60} className="h-12 w-12" />
+            <Image src="/chanceus-eagle.png" alt="ChanceUS" width={60} height={60} className="h-12 w-12" />
             <div>
               <h1 className="text-3xl font-bold text-white">
                 Welcome back, <span className="text-accent">{user.display_name || user.username}</span>!
@@ -60,7 +63,6 @@ export default async function DashboardPage() {
             value={user.tokens?.toLocaleString() || "0"}
             description="Available for betting"
             icon={Wallet}
-            bgColor="bg-orange-500"
           />
 
           <StatsCard
@@ -68,7 +70,6 @@ export default async function DashboardPage() {
             value={user.total_games_won || 0}
             description={`Out of ${user.total_games_played || 0} total`}
             icon={Trophy}
-            bgColor="bg-orange-500"
           />
 
           <StatsCard
@@ -76,7 +77,6 @@ export default async function DashboardPage() {
             value={`${user.win_rate || 0}%`}
             description="Your success percentage"
             icon={Target}
-            bgColor="bg-orange-500"
           />
 
           <StatsCard
@@ -84,7 +84,6 @@ export default async function DashboardPage() {
             value="#247"
             description="Global leaderboard"
             icon={TrendingUp}
-            bgColor="bg-orange-500"
           />
         </div>
 

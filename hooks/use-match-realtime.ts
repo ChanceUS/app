@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import type { Match } from '@/lib/supabase/client'
 
 interface UseMatchRealtimeProps {
@@ -8,14 +8,21 @@ interface UseMatchRealtimeProps {
   onGameDataUpdate?: (gameData: any) => void
 }
 
-export function useMatchRealtime({ 
-  matchId, 
-  onMatchUpdate, 
-  onGameDataUpdate 
+export function useMatchRealtime({
+  matchId,
+  onMatchUpdate,
+  onGameDataUpdate
 }: UseMatchRealtimeProps) {
   const [match, setMatch] = useState<Match | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [disableRealtime, setDisableRealtime] = useState(true) // Force disable Realtime due to binding issues
+  
+  // Use refs to prevent infinite loops
+  const isConnectingRef = useRef(false)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
 
   // Fetch initial match data
   const fetchMatch = useCallback(async () => {
@@ -33,70 +40,39 @@ export function useMatchRealtime({
     }
   }, [matchId])
 
-  // Subscribe to real-time updates
+  // Use polling only (Realtime disabled due to binding issues)
   useEffect(() => {
-    if (!matchId) return
-
+    if (!matchId || isConnectingRef.current) {
+      return
+    }
+    
+    console.log('🔌 Using polling only (Realtime disabled due to binding issues)')
+    setError('Using polling fallback - Realtime disabled due to binding issues')
+    
     // Fetch initial data
     fetchMatch()
+    
+    // Set up polling
+    pollIntervalRef.current = setInterval(() => {
+      console.log('🔄 Polling for match updates...')
+      fetchMatch()
+    }, 2000) // Poll every 2 seconds for better responsiveness
 
-    // Subscribe to match updates
-    const matchSubscription = supabase
-      .channel(`match:${matchId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'matches',
-          filter: `id=eq.${matchId}`
-        },
-        (payload) => {
-          console.log('Match update received:', payload)
-          
-          if (payload.eventType === 'UPDATE' && payload.new) {
-            const updatedMatch = payload.new as Match
-            setMatch(updatedMatch)
-            onMatchUpdate?.(updatedMatch)
-            
-            // If game data changed, trigger game update callback
-            if (payload.old?.game_data !== payload.new?.game_data) {
-              onGameDataUpdate?.(updatedMatch.game_data)
-            }
-          }
-        }
-      )
-      .subscribe((status) => {
-        setIsConnected(status === 'SUBSCRIBED')
-        if (status === 'SUBSCRIBED') {
-          console.log(`Subscribed to match ${matchId}`)
-        }
-      })
-
-    // Subscribe to match history updates
-    const historySubscription = supabase
-      .channel(`match_history:${matchId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'match_history',
-          filter: `match_id=eq.${matchId}`
-        },
-        (payload) => {
-          console.log('Match history update received:', payload)
-          // Refresh match data when new history is added
-          fetchMatch()
-        }
-      )
-      .subscribe()
-
+    // Cleanup function
     return () => {
-      matchSubscription.unsubscribe()
-      historySubscription.unsubscribe()
+      isConnectingRef.current = false
+      
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
     }
-  }, [matchId, onMatchUpdate, onGameDataUpdate]) // Removed fetchMatch from dependencies
+  }, [matchId, fetchMatch]) // Only depend on matchId and fetchMatch to prevent infinite loops
 
   // Function to update match
   const updateMatch = useCallback(async (updates: Partial<Match>) => {

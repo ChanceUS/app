@@ -191,6 +191,12 @@ export default function MultiplayerMathBlitz({
       localStorage.setItem(`gameState_${matchId}`, JSON.stringify(initialState))
       
       console.log('🎮 Game initialized with timer:', initialState.problems[0].timeLimit)
+      console.log('🎮 Initial game state:', {
+        problems: initialState.problems.length,
+        currentIndex: initialState.currentProblemIndex,
+        player1Answers: initialState.player1Answers.length,
+        player2Answers: initialState.player2Answers.length
+      })
     }
   }, [matchId])
 
@@ -221,7 +227,7 @@ export default function MultiplayerMathBlitz({
   useEffect(() => {
     if (!gameState || !currentProblem || gameState.player1Finished && gameState.player2Finished) return
 
-    // Start timer immediately when game state is available
+    // Start timer when game state is available and we have a current problem
     console.log('⏰ Starting timer for problem:', currentProblem.id, 'Time limit:', currentProblem.timeLimit)
     setTimeRemaining(currentProblem.timeLimit)
 
@@ -244,7 +250,7 @@ export default function MultiplayerMathBlitz({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [currentProblem]) // Only depend on currentProblem, not gameState
+  }, [currentProblem]) // Depend on currentProblem
 
   // Update opponent progress from game state (which includes merged data)
   useEffect(() => {
@@ -285,7 +291,13 @@ export default function MultiplayerMathBlitz({
     if (gameState.currentProblemIndex < gameState.problems.length) {
       const newProblem = gameState.problems[gameState.currentProblemIndex]
       if (newProblem) {
-        console.log('➡️ Updating to new problem:', newProblem.id)
+        console.log('➡️ Updating to new problem:', {
+          problemId: newProblem.id,
+          currentIndex: gameState.currentProblemIndex,
+          totalProblems: gameState.problems.length,
+          player1Answers: gameState.player1Answers.length,
+          player2Answers: gameState.player2Answers.length
+        })
         setCurrentProblem(newProblem)
         setTimeRemaining(newProblem.timeLimit)
         setHasAnsweredCurrentProblem(false) // Reset answer flag for new question
@@ -296,7 +308,9 @@ export default function MultiplayerMathBlitz({
         currentIndex: gameState.currentProblemIndex,
         problemsLength: gameState.problems.length,
         p1Finished: gameState.player1Finished,
-        p2Finished: gameState.player2Finished
+        p2Finished: gameState.player2Finished,
+        player1Answers: gameState.player1Answers.length,
+        player2Answers: gameState.player2Answers.length
       })
     }
   }, [gameState])
@@ -314,6 +328,13 @@ export default function MultiplayerMathBlitz({
         // Stop polling if game is finished to prevent infinite loops
         if (parsedState.player1Finished && parsedState.player2Finished) {
           console.log('🏁 Game finished, stopping polling to prevent infinite loops')
+          console.log('🏁 Final state when stopping polling:', {
+            player1Finished: parsedState.player1Finished,
+            player2Finished: parsedState.player2Finished,
+            player1Answers: parsedState.player1Answers?.length || 0,
+            player2Answers: parsedState.player2Answers?.length || 0,
+            gameResult: gameResult
+          })
           return
         }
         
@@ -379,6 +400,14 @@ export default function MultiplayerMathBlitz({
 
     console.log('🎯 Answer submitted:', { answer, currentProblemIndex: gameState.currentProblemIndex, playerId })
     console.log('🎯 Player details:', { isPlayer1, playerId, currentUserId, player1Id })
+    console.log('🎯 Current game state before answer:', {
+      currentProblemIndex: gameState.currentProblemIndex,
+      totalProblems: gameState.problems.length,
+      player1Answers: gameState.player1Answers.length,
+      player2Answers: gameState.player2Answers.length,
+      player1Finished: gameState.player1Finished,
+      player2Finished: gameState.player2Finished
+    })
     
     // Mark as answered locally to prevent multiple clicks
     setLocalAnswerSubmitted(true)
@@ -394,6 +423,25 @@ export default function MultiplayerMathBlitz({
       problemsLength: newGameState.problems.length,
       isFinished: newGameState.currentProblemIndex >= newGameState.problems.length
     })
+    
+    // Check if this player should finish
+    const shouldFinish = newGameState.currentProblemIndex >= newGameState.problems.length
+    console.log('🔍 Should this player finish?', {
+      shouldFinish,
+      currentIndex: newGameState.currentProblemIndex,
+      totalProblems: newGameState.problems.length,
+      playerId,
+      player1Answers: newGameState.player1Answers.length,
+      player2Answers: newGameState.player2Answers.length
+    })
+    
+    if (shouldFinish) {
+      console.log('🏁 Player should finish! Current state:', {
+        player1Finished: newGameState.player1Finished,
+        player2Finished: newGameState.player2Finished,
+        bothFinished: newGameState.player1Finished && newGameState.player2Finished
+      })
+    }
     
     // Save updated state to localStorage for sharing between players
     // Always merge with existing shared state to preserve opponent's data
@@ -480,10 +528,27 @@ export default function MultiplayerMathBlitz({
         player2Finished: !isPlayer1 ? true : (stateToSave.player2Finished || false),
         winner: 'draw' // Will be calculated properly by calculateMultiplayerResult
       }
+      
+      console.log('🎯 Player finished! Updated state:', {
+        isPlayer1: isPlayer1,
+        player1Finished: finishedState.player1Finished,
+        player2Finished: finishedState.player2Finished,
+        player1Answers: finishedState.player1Answers.length,
+        player2Answers: finishedState.player2Answers.length
+      })
       localStorage.setItem(`gameState_${matchId}`, JSON.stringify(finishedState))
       setGameState(finishedState)
       
       // Only calculate and submit final result if BOTH players have finished
+      console.log('🔍 Checking if both players finished:', {
+        player1Finished: finishedState.player1Finished,
+        player2Finished: finishedState.player2Finished,
+        isPlayer1: isPlayer1,
+        currentUserId: currentUserId,
+        player1Id: player1Id,
+        player2Id: player2Id
+      })
+      
       if (finishedState.player1Finished && finishedState.player2Finished) {
         console.log('🏁 Both players finished! Calculating final result...')
         
@@ -770,7 +835,118 @@ export default function MultiplayerMathBlitz({
   // Don't render questions if both players are finished OR if we're past the last question
   if (gameState.player1Finished && gameState.player2Finished) {
     console.log('🏁 Game finished, not rendering questions')
-    return null
+    console.log('🏁 GameResult status:', {
+      hasGameResult: !!gameResult,
+      gameResult: gameResult,
+      gameState: {
+        player1Finished: gameState.player1Finished,
+        player2Finished: gameState.player2Finished,
+        player1Answers: gameState.player1Answers.length,
+        player2Answers: gameState.player2Answers.length
+      }
+    })
+    
+    // If no game result, try to calculate it
+    if (!gameResult) {
+      console.log('🔄 No game result found, calculating...')
+      const result = calculateMultiplayerResult(gameState)
+      console.log('🎯 Calculated result:', result)
+      setGameResult(result)
+    }
+    
+    // Show results instead of questions
+    if (gameResult) {
+      console.log('🎯 Rendering results:', gameResult)
+      const result = gameResult as MultiplayerResult
+      const myResult = isPlayer1 ? result.player1Result : result.player2Result
+      const opponentResult = isPlayer1 ? result.player2Result : result.player1Result
+      const isWinner = result.winner === playerId
+      const isDraw = result.winner === 'draw'
+
+      return (
+        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className={`p-3 rounded-full ${isWinner ? 'bg-yellow-500' : isDraw ? 'bg-gray-500' : 'bg-red-500'}`}>
+                {isWinner ? <Trophy className="h-8 w-8 text-black" /> : 
+                 isDraw ? <CheckCircle className="h-8 w-8 text-black" /> : 
+                 <XCircle className="h-8 w-8 text-black" />}
+              </div>
+            </div>
+            <CardTitle className="text-3xl font-bold text-white">
+              {isWinner ? 'You Won!' : isDraw ? "It's a Draw!" : 'You Lost!'}
+            </CardTitle>
+            <p className="text-gray-400">
+              {isWinner ? 'Congratulations on your victory!' : 
+               isDraw ? 'Both players performed equally well!' : 
+               'Better luck next time!'}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Results Comparison */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className={`p-6 rounded-lg ${isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
+                <h3 className="text-lg font-semibold text-white mb-4">Your Results</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Composite Score:</span>
+                    <span className="text-white font-bold text-xl">{myResult.compositeScore || myResult.score}</span>
+                  </div>
+                  {myResult.scoreBreakdown && (
+                    <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Base: {myResult.scoreBreakdown.baseScore}</span>
+                        <span className="text-green-400">+Acc: {myResult.scoreBreakdown.accuracyBonus}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">+Speed: {myResult.scoreBreakdown.speedBonus}</span>
+                        <span className="text-purple-400">+Cons: {myResult.scoreBreakdown.consistencyBonus}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-yellow-400">+Comp: {myResult.scoreBreakdown.completionBonus}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className={`p-6 rounded-lg ${!isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
+                <h3 className="text-lg font-semibold text-white mb-4">Opponent Results</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Composite Score:</span>
+                    <span className="text-white font-bold text-xl">{opponentResult.compositeScore || opponentResult.score}</span>
+                  </div>
+                  {opponentResult.scoreBreakdown && (
+                    <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Base: {opponentResult.scoreBreakdown.baseScore}</span>
+                        <span className="text-green-400">+Acc: {opponentResult.scoreBreakdown.accuracyBonus}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">+Speed: {opponentResult.scoreBreakdown.speedBonus}</span>
+                        <span className="text-purple-400">+Cons: {opponentResult.scoreBreakdown.consistencyBonus}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-yellow-400">+Comp: {opponentResult.scoreBreakdown.completionBonus}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    } else {
+      return (
+        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-white">Calculating Results...</CardTitle>
+            <p className="text-gray-400">Please wait while we calculate the final scores.</p>
+          </CardHeader>
+        </Card>
+      )
+    }
   }
   
   // Also don't render if we're past the last question (safety check)
@@ -781,6 +957,117 @@ export default function MultiplayerMathBlitz({
       p1Finished: gameState.player1Finished,
       p2Finished: gameState.player2Finished
     })
+    
+    // If both players are finished, show results
+    if (gameState.player1Finished && gameState.player2Finished) {
+      console.log('🏁 Both players finished, showing results from past last question check')
+      
+      // If no game result, try to calculate it
+      if (!gameResult) {
+        console.log('🔄 No game result found, calculating from past last question check...')
+        const result = calculateMultiplayerResult(gameState)
+        console.log('🎯 Calculated result from past last question check:', result)
+        setGameResult(result)
+      }
+      
+      // Show results instead of null
+      if (gameResult) {
+        console.log('🎯 Rendering results from past last question check:', gameResult)
+        const result = gameResult as MultiplayerResult
+        const myResult = isPlayer1 ? result.player1Result : result.player2Result
+        const opponentResult = isPlayer1 ? result.player2Result : result.player1Result
+        const isWinner = result.winner === playerId
+        const isDraw = result.winner === 'draw'
+
+        return (
+          <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+            <CardHeader className="text-center">
+              <div className="text-6xl mb-4">🏆</div>
+              <h2 className="text-3xl font-bold text-white mb-2">
+                {isDraw ? "It's a Draw!" : isWinner ? "You Won!" : "You Lost!"}
+              </h2>
+              <p className="text-gray-400">
+                {isDraw ? "Both players performed equally well!" : 
+                 isWinner ? "Congratulations on your victory!" : 
+                 "Better luck next time!"}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className={`p-4 rounded-lg ${isPlayer1 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
+                  <h3 className="text-lg font-semibold text-white mb-2">Your Score</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Score:</span>
+                      <span className="text-white font-semibold">{myResult.score}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Problems Solved:</span>
+                      <span className="text-white">{myResult.problemsSolved}/10</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Accuracy:</span>
+                      <span className="text-white">{(myResult.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Time:</span>
+                      <span className="text-white">{myResult.totalTime.toFixed(1)}s</span>
+                    </div>
+                  </div>
+                </div>
+                <div className={`p-4 rounded-lg ${isPlayer1 ? 'bg-gray-800/30' : 'bg-orange-500/20 border border-orange-500/30'}`}>
+                  <h3 className="text-lg font-semibold text-white mb-2">Opponent Score</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Score:</span>
+                      <span className="text-white font-semibold">{opponentResult.score}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Problems Solved:</span>
+                      <span className="text-white">{opponentResult.problemsSolved}/10</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Accuracy:</span>
+                      <span className="text-white">{(opponentResult.accuracy * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Time:</span>
+                      <span className="text-white">{opponentResult.totalTime.toFixed(1)}s</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <Alert className="bg-gray-800/50 border-gray-700">
+                <Trophy className="h-4 w-4" />
+                <AlertDescription className="text-gray-300">
+                  Winner determined by: <span className="text-white font-semibold capitalize">
+                    {result.winReason === 'composite' ? 'Overall Performance' : result.winReason}
+                  </span>
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+        )
+      } else {
+        console.log('⚠️ No game result available in past last question check')
+        return (
+          <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+            <CardContent className="text-center py-12">
+              <div className="text-6xl mb-4">🏆</div>
+              <h2 className="text-2xl font-bold text-white mb-4">Game Complete!</h2>
+              <p className="text-gray-400">Calculating results...</p>
+              <div className="text-xs text-gray-500 mt-4">
+                Debug: P1 finished: {gameState.player1Finished ? 'Yes' : 'No'}, 
+                P2 finished: {gameState.player2Finished ? 'Yes' : 'No'}, 
+                P1 answers: {gameState.player1Answers.length}, 
+                P2 answers: {gameState.player2Answers.length}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      }
+    }
+    
     return null
   }
 

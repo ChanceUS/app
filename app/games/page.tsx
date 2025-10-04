@@ -43,6 +43,8 @@ export default async function GamesPage() {
 
   // Get all active games
   const { data: games = [] } = await supabase.from("games").select("*").eq("is_active", true).order("name")
+  
+  console.log("🎮 Games loaded:", games.map(g => ({ id: g.id, name: g.name })))
 
   // Get waiting matches with user info - show ALL waiting matches including user's own
   // Exclude matches that have both players (they should be completed)
@@ -61,8 +63,29 @@ export default async function GamesPage() {
     )
     .eq("status", "waiting")
     .is("player2_id", null) // Only show matches waiting for a second player
+    .neq("player1_id", authUser.id) // Exclude user's own matches
     .order("created_at", { ascending: false })
     .limit(10)
+
+  // Get user's own matches that can be cancelled (waiting or in_progress)
+  const { data: myCancellableMatches = [] } = await supabase
+    .from("matches")
+    .select(
+      `
+      id,
+      bet_amount,
+      created_at,
+      player1_id,
+      player2_id,
+      status,
+      games (name),
+      player1:users!matches_player1_id_fkey (username, display_name, avatar_url),
+      player2:users!matches_player2_id_fkey (username, display_name, avatar_url)
+    `,
+    )
+    .or(`player1_id.eq.${authUser.id},player2_id.eq.${authUser.id}`)
+    .in("status", ["waiting", "in_progress"])
+    .order("created_at", { ascending: false })
 
   // Debug: Get ALL waiting matches to see what exists
   const { data: allWaitingMatches = [] } = await supabase
@@ -79,6 +102,7 @@ export default async function GamesPage() {
     )
     .eq("status", "waiting")
     .is("player2_id", null)
+    .neq("player1_id", authUser.id) // Don't show user's own matches here
     .order("created_at", { ascending: false })
 
   // Debug: Let's also check what matches exist in the database
@@ -130,8 +154,9 @@ export default async function GamesPage() {
       match_type,
       expires_at,
       created_at,
+      user_id,
       games (name),
-      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
+      users (username, display_name, avatar_url)
     `,
     )
     .eq("status", "waiting")
@@ -192,7 +217,14 @@ export default async function GamesPage() {
 
   console.log('🔍 Debug - Available matches for joining:', {
     totalWaiting: waitingMatches.length,
-    matches: waitingMatches.map(m => ({ id: m.id, game: m.games?.name, bet: m.bet_amount, creator: m.player1?.username }))
+    matches: waitingMatches.map(m => ({ 
+      id: m.id, 
+      game: m.games?.name, 
+      bet: m.bet_amount, 
+      creator: m.player1?.username,
+      player1Data: m.player1,
+      player1Id: m.player1_id
+    }))
   })
 
   // Check if there are any matches that should be completed but aren't
@@ -227,7 +259,7 @@ export default async function GamesPage() {
       game: q.games?.name, 
       bet: q.bet_amount, 
       type: q.match_type,
-      user: q.users?.username,
+      user: q.users?.username || 'Unknown',
       expires: q.expires_at
     }))
   })
@@ -271,41 +303,46 @@ export default async function GamesPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 relative">
       <CleanupHandler />
       <Header user={user} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Page Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Games Lobby</h1>
-              <p className="text-gray-400">Choose your game and test your skills against other players</p>
+              <h1 className="text-4xl font-bold text-white mb-2">Games Lobby</h1>
+              <p className="text-gray-400 text-lg">Choose your game and test your skills against other players</p>
             </div>
-            <Button 
-              asChild
-              variant="outline"
-              className="border-gray-600 text-gray-300 hover:bg-gray-800"
-            >
-              <Link href="/games">
-                🔄 Refresh
-              </Link>
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button 
+                asChild
+                variant="outline"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+              >
+                <Link href="/games">
+                  🔄 Refresh
+                </Link>
+              </Button>
+              <Button
+                asChild
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Link href={`/games/${games[0]?.id}/create`}>
+                  Create New Match
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Games Grid */}
         <div className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-white">Available Games</h2>
-            <Button
-              href={`/games/${games[0]?.id}/create`}
-              className="btn-primary"
-            >
-              Create New Match
-            </Button>
-          </div>
+          <h2 className="text-2xl font-bold text-white mb-6">Available Games</h2>
           <div className="grid md:grid-cols-3 gap-6">
             {games.map((game) => (
               <GameCard
@@ -340,11 +377,24 @@ export default async function GamesPage() {
         {/* Available Matches */}
         <div className="grid lg:grid-cols-2 gap-8">
           {/* All Available Matches */}
-          <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Available Matches</h3>
+          <div className="bg-gray-900/80 border-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Available Matches</h3>
             <p className="text-gray-400 text-sm mb-4">Join existing matches or find opponents</p>
             
             <div className="space-y-4">
+              {/* My Active Matches */}
+              {myCancellableMatches.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">My Active Matches</h4>
+                  <MatchList
+                    matches={myCancellableMatches}
+                    currentUserId={user.id}
+                    title=""
+                    description=""
+                  />
+                </div>
+              )}
+
               {/* My Active Matchmaking */}
               <MyMatchmakingQueues queues={myMatchmakingQueues} />
               
@@ -354,7 +404,7 @@ export default async function GamesPage() {
                   <h4 className="text-sm font-medium text-gray-300 mb-2">Open Matches</h4>
                   <MatchList
                     matches={waitingMatches}
-                    currentUserId={user.username}
+                    currentUserId={user.id}
                     title=""
                     description=""
                   />
@@ -368,7 +418,7 @@ export default async function GamesPage() {
               </div>
               
               {/* No matches message */}
-              {waitingMatches.length === 0 && matchmakingQueues.length === 0 && myMatchmakingQueues.length === 0 && (
+              {waitingMatches.length === 0 && matchmakingQueues.length === 0 && myMatchmakingQueues.length === 0 && myCancellableMatches.length === 0 && (
                 <div className="text-center py-8">
                   <div className="text-gray-400 mb-2">No matches available</div>
                   <div className="text-gray-500 text-sm">Create a new match to get started!</div>
@@ -378,7 +428,7 @@ export default async function GamesPage() {
           </div>
 
           {/* Quick Stats */}
-          <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-6">
+          <div className="bg-gray-900/80 border-gray-800 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Lobby Stats</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -421,18 +471,6 @@ export default async function GamesPage() {
           </div>
         </div>
 
-        {/* My Waiting Matches */}
-        {myWaitingMatches.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-white mb-6">My Waiting Matches</h2>
-            <MatchList
-              matches={myWaitingMatches}
-              currentUserId={user.username}
-              title="Waiting for Players"
-              description="Your matches waiting for opponents to join"
-            />
-          </div>
-        )}
       </main>
       <CleanupHandler />
     </div>

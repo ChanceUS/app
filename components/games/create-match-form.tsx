@@ -175,7 +175,10 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           // If this new match involves the current user, redirect immediately
           if (match.player1_id === user.id || match.player2_id === user.id) {
             console.log("🎮 New match created for you! Redirecting to:", match.id)
-            router.push(`/games/match/${match.id}`)
+            // Add a small delay to ensure the match is fully created
+            setTimeout(() => {
+              router.push(`/games/match/${match.id}`)
+            }, 1000)
           }
         }
       )
@@ -195,7 +198,10 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           if ((match.player1_id === user.id || match.player2_id === user.id) && 
               match.status === 'in_progress') {
             console.log("🎮 Match started! Redirecting to:", match.id)
-            router.push(`/games/match/${match.id}`)
+            // Add a small delay to ensure the match is fully updated
+            setTimeout(() => {
+              router.push(`/games/match/${match.id}`)
+            }, 1000)
           }
         }
       )
@@ -425,8 +431,8 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
         // Reset the state immediately
         setHasActiveMatch(false)
         setActiveMatchInfo(null)
-        // Refresh the page to reset the state
-        window.location.reload()
+        // Redirect to games page after successful cancellation
+        window.location.href = "/games"
       } else {
         console.log("❌ No active matches found")
         alert("No active matches found")

@@ -12,8 +12,11 @@ export default async function ProfilePage() {
   // If Supabase is not configured, show setup message
   if (!isSupabaseConfigured) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <h1 className="text-2xl font-bold mb-4 text-white">Connect Supabase to get started</h1>
+      <div className="flex min-h-screen items-center justify-center bg-gray-950 relative">
+        {/* Subtle gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+        
+        <h1 className="text-2xl font-bold mb-4 text-white relative z-10">Connect Supabase to get started</h1>
       </div>
     )
   }
@@ -54,12 +57,15 @@ export default async function ProfilePage() {
   }, 0)
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 relative">
       <Header user={user} />
+      
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Profile Header */}
-        <Card className="bg-gray-900/50 border-gray-800 mb-8">
+        <Card className="bg-gray-900/80 border-gray-800 mb-8">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-6">
@@ -105,7 +111,7 @@ export default async function ProfilePage() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Stats */}
           <div className="lg:col-span-2 space-y-6">
-            <Card className="bg-gray-900/50 border-gray-800">
+            <Card className="bg-gray-900/80 border-gray-800">
               <CardHeader>
                 <CardTitle className="text-white">Gaming Statistics</CardTitle>
                 <CardDescription className="text-gray-400">Your performance across all games</CardDescription>
@@ -133,7 +139,7 @@ export default async function ProfilePage() {
             </Card>
 
             {/* Recent Activity */}
-            <Card className="bg-gray-900/50 border-gray-800">
+            <Card className="bg-gray-900/80 border-gray-800">
               <CardHeader>
                 <CardTitle className="text-white">Recent Activity</CardTitle>
                 <CardDescription className="text-gray-400">Your latest gaming sessions</CardDescription>
@@ -145,7 +151,7 @@ export default async function ProfilePage() {
                       <div className="flex items-center space-x-3">
                         <div className="text-xl">
                           {match.games?.name === "Math Blitz" && "🧮"}
-                          {match.games?.name === "Connect 4" && "🔴"}
+                          {match.games?.name === "4 In a Row" && "🔴"}
                           {match.games?.name === "Trivia Challenge" && "🧠"}
                         </div>
                         <div>
@@ -171,7 +177,7 @@ export default async function ProfilePage() {
 
           {/* Achievements */}
           <div className="space-y-6">
-            <Card className="bg-gray-900/50 border-gray-800">
+            <Card className="bg-gray-900/80 border-gray-800">
               <CardHeader>
                 <CardTitle className="text-white">Achievements</CardTitle>
                 <CardDescription className="text-gray-400">Your gaming milestones</CardDescription>
