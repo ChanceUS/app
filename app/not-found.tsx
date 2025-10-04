@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -5,8 +7,11 @@ import { Home, ArrowLeft } from "lucide-react"
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-gray-900/50 border-gray-800">
+    <div className="min-h-screen bg-gray-950 relative flex items-center justify-center p-4">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+      
+      <Card className="w-full max-w-md bg-gray-900/80 border-gray-800 relative z-10">
         <CardHeader className="text-center">
           <div className="text-6xl font-bold text-orange-500 mb-4">404</div>
           <CardTitle className="text-white text-xl">Page Not Found</CardTitle>
