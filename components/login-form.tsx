@@ -119,6 +119,7 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
         </div>
 
         <form action={formAction} className="space-y-6">
+          {redirectUrl && <input type="hidden" name="redirect" value={redirectUrl} />}
           {state?.error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-center">
               {state.error}

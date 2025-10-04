@@ -14,6 +14,7 @@ export async function signIn(prevState: any, formData: FormData) {
 
   const email = formData.get("email")
   const password = formData.get("password")
+  const redirectUrl = formData.get("redirect")
 
   // Validate required fields
   if (!email || !password) {
@@ -33,7 +34,10 @@ export async function signIn(prevState: any, formData: FormData) {
       return { error: error.message }
     }
 
-    redirect("/dashboard")
+    // Redirect to the specified URL or dashboard
+    const finalRedirectUrl = redirectUrl ? redirectUrl.toString() : "/dashboard"
+    console.log("🔍 DEBUG: Sign in successful, redirecting to:", finalRedirectUrl)
+    redirect(finalRedirectUrl)
   } catch (error) {
     console.error("Login error:", error)
     return { error: "An unexpected error occurred. Please try again." }
