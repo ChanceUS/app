@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, User, Wallet, Coins } from "lucide-react"
+import { LogOut, Settings, User, Wallet, Coins, Gamepad2 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/lib/actions"
 import type { User as UserType } from "@/lib/supabase/client"
@@ -124,6 +124,12 @@ export default function Header({ user }: HeaderProps) {
                     <Link href="/profile">
                       <User className="mr-2 h-4 w-4" />
                       Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="text-white hover:bg-white/10 rounded-lg m-1">
+                    <Link href="/games">
+                      <Gamepad2 className="mr-2 h-4 w-4" />
+                      Games
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="text-white hover:bg-white/10 rounded-lg m-1">
