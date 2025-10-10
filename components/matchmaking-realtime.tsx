@@ -123,6 +123,7 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
 
       console.log("✅ Updated matchmaking queues with users:", updatedQueues?.length || 0, updatedQueues)
       console.log("🔍 First queue user data:", updatedQueues?.[0]?.users)
+      console.log("🔍 Full first queue object:", JSON.stringify(updatedQueues?.[0], null, 2))
       setQueues(updatedQueues || [])
     } catch (error) {
       console.error("❌ Error in refreshQueues:", error)
