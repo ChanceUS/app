@@ -18,6 +18,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [isLoading, setIsLoading] = useState(false)
   const [currentPlayer, setCurrentPlayer] = useState<'player1' | 'player2'>('player1')
   const [winner, setWinner] = useState<'player1' | 'player2' | 'draw' | null>(null)
+  const [playerNames, setPlayerNames] = useState<{player1: string, player2: string}>({player1: 'Player 1', player2: 'Player 2'})
   
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
@@ -29,6 +30,24 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     const loadGameState = async () => {
       try {
         const supabase = createClient()
+        
+        // Load player names
+        if (player1Id && player2Id) {
+          const { data: players, error: playersError } = await supabase
+            .from('users')
+            .select('id, display_name, username')
+            .in('id', [player1Id, player2Id])
+          
+          if (!playersError && players) {
+            const player1Data = players.find(p => p.id === player1Id)
+            const player2Data = players.find(p => p.id === player2Id)
+            setPlayerNames({
+              player1: player1Data?.display_name || player1Data?.username || 'Player 1',
+              player2: player2Data?.display_name || player2Data?.username || 'Player 2'
+            })
+          }
+        }
+        
         const { data, error } = await supabase
           .from('matches')
           .select('status, game_data, winner_id, player1_id, player2_id')
@@ -313,17 +332,21 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   </div>
                   
                   <div className="mt-6 text-gray-300 text-center">
-                    {currentStatus === 'completed' ? (
+                    {winner ? (
                       <div className="text-2xl font-bold">
                         {winner === 'draw' ? (
                           <span className="text-gray-400">It's a Draw!</span>
                         ) : winner === 'player1' ? (
-                          <span className="text-red-400">Player 1 Wins! 🎉</span>
+                          <span className="text-red-400">{playerNames.player1} Wins! 🎉</span>
                         ) : winner === 'player2' ? (
-                          <span className="text-yellow-400">Player 2 Wins! 🎉</span>
+                          <span className="text-yellow-400">{playerNames.player2} Wins! 🎉</span>
                         ) : (
-                          <span className="text-green-400">Player 1 Wins! 🎉</span>
+                          <span className="text-green-400">{playerNames.player1} Wins! 🎉</span>
                         )}
+                      </div>
+                    ) : currentStatus === 'completed' ? (
+                      <div className="text-2xl font-bold">
+                        <span className="text-green-400">Match Completed!</span>
                       </div>
                     ) : (
                       <div>
@@ -337,13 +360,13 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         </p>
                         <p className="text-sm text-gray-400 mt-1">
                           Current Player: <span className={currentPlayer === 'player1' ? 'text-red-400' : 'text-yellow-400'}>
-                            {currentPlayer === 'player1' ? 'Player 1 (Red)' : 'Player 2 (Yellow)'}
+                            {currentPlayer === 'player1' ? `${playerNames.player1} (Red)` : `${playerNames.player2} (Yellow)`}
                           </span>
                         </p>
                         {myPlayer && (
                           <p className="text-sm text-blue-400 mt-1">
                             You are: <span className={myPlayer === 'player1' ? 'text-red-400' : 'text-yellow-400'}>
-                              {myPlayer === 'player1' ? 'Player 1 (Red)' : 'Player 2 (Yellow)'}
+                              {myPlayer === 'player1' ? `${playerNames.player1} (Red)` : `${playerNames.player2} (Yellow)`}
                             </span>
                           </p>
                         )}
