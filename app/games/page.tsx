@@ -6,6 +6,7 @@ import MatchList from "@/components/games/match-list"
 import MatchmakingRealtime from "@/components/matchmaking-realtime"
 import MyMatchmakingQueues from "@/components/my-matchmaking-queues"
 import CleanupHandler from "@/components/cleanup-handler"
+import GamesPageClient from "@/components/games-page-client"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { forceCompleteMatches } from "@/lib/force-complete-matches"
@@ -157,7 +158,7 @@ export default async function GamesPage() {
       created_at,
       user_id,
       games (name),
-      users (username, display_name, avatar_url)
+      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
     `,
     )
     .eq("status", "waiting")
@@ -309,6 +310,7 @@ export default async function GamesPage() {
     <div className="min-h-screen bg-gray-950 relative">
       <CleanupHandler />
       <Header user={user} />
+      <GamesPageClient userId={user.id} />
 
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>

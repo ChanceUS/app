@@ -22,7 +22,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
-  const myPlayer = currentUserId === player1Id ? 'player1' : currentUserId === player2Id ? 'player2' : null
   
 
   // Load game state from database and check for updates
@@ -41,10 +40,15 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           if (!playersError && players) {
             const player1Data = players.find(p => p.id === player1Id)
             const player2Data = players.find(p => p.id === player2Id)
-            setPlayerNames({
+            console.log('🔍 Player data loaded:', { player1Data, player2Data, player1Id, player2Id })
+            const newPlayerNames = {
               player1: player1Data?.display_name || player1Data?.username || 'Player 1',
               player2: player2Data?.display_name || player2Data?.username || 'Player 2'
-            })
+            }
+            console.log('🔍 Setting player names:', newPlayerNames)
+            setPlayerNames(newPlayerNames)
+          } else {
+            console.error('❌ Error loading players:', playersError)
           }
         }
         
@@ -82,6 +86,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             
             // Update winner if different
             if (gameData.winner !== undefined && gameData.winner !== winner) {
+              console.log('🔍 Setting winner from game data:', gameData.winner)
               setWinner(gameData.winner)
             }
           }

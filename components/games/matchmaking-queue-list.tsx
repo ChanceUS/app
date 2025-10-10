@@ -113,6 +113,7 @@ export default function MatchmakingQueueList({ queues }: MatchmakingQueueListPro
   return (
     <div className="space-y-3">
       {queues.map((queue) => {
+        console.log('🔍 Queue data:', queue) // Debug log
         const [minutes, seconds] = formatTimeRemaining(queue.expires_at).split(':').map(Number)
         
         return (
@@ -131,6 +132,10 @@ export default function MatchmakingQueueList({ queues }: MatchmakingQueueListPro
                   </div>
                   <div className="text-gray-400 text-xs">
                     {queue.games?.name || 'Unknown Game'} • {getMatchTypeDisplay(queue.match_type, queue.bet_amount)}
+                  </div>
+                  {/* Debug info */}
+                  <div className="text-red-400 text-xs">
+                    Debug: users={JSON.stringify(queue.users)}, user_id={queue.user_id}
                   </div>
                 </div>
               </div>

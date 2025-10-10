@@ -101,8 +101,8 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
           expires_at,
           created_at,
           status,
-          games (name),
-          users (username, display_name, avatar_url)
+          user_id,
+          games (name)
         `,
         )
         .eq("status", "waiting")
@@ -116,8 +116,25 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
         return
       }
 
-      console.log("✅ Updated matchmaking queues:", updatedQueues?.length || 0, updatedQueues)
-      setQueues(updatedQueues || [])
+      // Manually fetch user data for each queue
+      const queuesWithUsers = await Promise.all(
+        (updatedQueues || []).map(async (queue) => {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("username, display_name, avatar_url")
+            .eq("id", queue.user_id)
+            .single()
+          
+          return {
+            ...queue,
+            users: userData
+          }
+        })
+      )
+
+      console.log("✅ Updated matchmaking queues with users:", queuesWithUsers?.length || 0, queuesWithUsers)
+      console.log("🔍 First queue user data:", queuesWithUsers?.[0]?.users)
+      setQueues(queuesWithUsers || [])
     } catch (error) {
       console.error("❌ Error in refreshQueues:", error)
     }
