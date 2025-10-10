@@ -197,11 +197,19 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           // If this match involves the current user and status changed to in_progress
           if ((match.player1_id === user.id || match.player2_id === user.id) && 
               match.status === 'in_progress') {
-            console.log("🎮 Match started! Redirecting to:", match.id)
-            // Add a small delay to ensure the match is fully updated
-            setTimeout(() => {
-              router.push(`/games/match/${match.id}`)
-            }, 1000)
+            console.log("🎮 Match started! Checking if redirect needed...")
+            
+            // Only redirect if we're not already on the match page
+            const currentPath = window.location.pathname
+            if (!currentPath.includes(`/match/${match.id}`)) {
+              console.log("🎮 Not on match page, redirecting to:", match.id)
+              // Add a small delay to ensure the match is fully updated
+              setTimeout(() => {
+                router.push(`/games/match/${match.id}`)
+              }, 1000)
+            } else {
+              console.log("🎮 Already on match page, no redirect needed")
+            }
           }
         }
       )

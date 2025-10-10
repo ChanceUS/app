@@ -190,8 +190,8 @@ export default function MatchPage({ params }: MatchPageProps) {
                     console.error('Error starting match:', error)
                   } else {
                     console.log('Match started!')
-                    // Refresh the page to show updated status
-                    window.location.reload()
+                    // Update local state instead of reloading
+                    setMatch((prev: any) => ({ ...prev, status: 'in_progress', started_at: new Date().toISOString() }))
                   }
                 } catch (error) {
                   console.error('Error starting match:', error)

@@ -26,10 +26,9 @@ export default function StartGameButton({ matchId, onGameStarted }: StartGameBut
         alert('Failed to start match: ' + error.message)
       } else {
         console.log('✅ Match started successfully!')
-        alert('Game started! Refreshing page...')
+        alert('Game started!')
         onGameStarted()
-        // Reload the page to refresh everything
-        window.location.reload()
+        // Don't reload the page, let the parent component handle the state update
       }
     } catch (error) {
       console.error('Error starting match:', error)

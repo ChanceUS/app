@@ -21,8 +21,8 @@ export default function RealTimeHandler({ userId }: RealTimeHandlerProps) {
       try {
         // Don't redirect if we're on games pages - let the user browse freely
         const currentPath = window.location.pathname
-        if (currentPath.includes('/create') || currentPath === '/games' || currentPath.startsWith('/games/')) {
-          console.log("🔍 On games page, skipping redirect to let user browse freely")
+        if (currentPath.includes('/create') || currentPath === '/games' || currentPath.startsWith('/games/') || currentPath.includes('/match/')) {
+          console.log("🔍 On games/match page, skipping redirect to let user browse freely")
           return false
         }
 
