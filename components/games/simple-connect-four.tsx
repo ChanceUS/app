@@ -360,29 +360,46 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               )}
               
               {/* Game board */}
-              <div className="text-center text-xs text-red-400 mb-2">DEBUG: Game Board - Smaller Circles</div>
+              <div className="text-center text-xs text-red-400 mb-2">DEBUG: Game Board - Clickable Columns</div>
               <div className="grid grid-cols-7 gap-3 max-w-md mx-auto">
-                {Array.from({ length: 42 }, (_, i) => {
-                  const piece = board[i]
-                  let pieceColor = 'bg-gray-700 border-gray-600'
-                  
-                  if (piece === 'player1') {
-                    pieceColor = 'bg-red-500 border-red-400'
-                  } else if (piece === 'player2') {
-                    pieceColor = 'bg-yellow-400 border-yellow-300'
-                  }
-                  
-                  return (
-                    <div
-                      key={i}
-                      className={`w-8 h-8 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
-                        currentStatus === 'cancelled' 
-                          ? 'opacity-50' 
-                          : 'hover:scale-110'
+                {Array.from({ length: 7 }, (_, col) => (
+                  <div key={col} className="flex flex-col gap-3">
+                    {Array.from({ length: 6 }, (_, row) => {
+                      const i = col + (row * 7)
+                      const piece = board[i]
+                      let pieceColor = 'bg-gray-700 border-gray-600'
+                      
+                      if (piece === 'player1') {
+                        pieceColor = 'bg-red-500 border-red-400'
+                      } else if (piece === 'player2') {
+                        pieceColor = 'bg-yellow-400 border-yellow-300'
+                      }
+                      
+                      return (
+                        <div
+                          key={i}
+                          className={`w-8 h-8 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
+                            currentStatus === 'cancelled' 
+                              ? 'opacity-50' 
+                              : 'hover:scale-110'
+                          }`}
+                        />
+                      )
+                    })}
+                    {/* Clickable column area */}
+                    <button
+                      onClick={() => dropPiece(col)}
+                      disabled={!isMyTurn || winner || currentStatus !== 'in_progress'}
+                      className={`h-6 text-xs font-bold rounded transition-colors ${
+                        isMyTurn && !winner && currentStatus === 'in_progress'
+                          ? 'bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 cursor-pointer'
+                          : 'bg-gray-500/20 text-gray-500 cursor-not-allowed'
                       }`}
-                    />
-                  )
-                })}
+                    >
+                      Drop
+                    </button>
+                  </div>
+                ))}
               </div>
               
             </div>
