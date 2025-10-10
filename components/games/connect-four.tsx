@@ -163,7 +163,7 @@ export default function ConnectFour({
       <CardContent>
         <div className="space-y-3 sm:space-y-2">
           {/* Column buttons */}
-          <div className="grid grid-cols-7 gap-3 sm:gap-1 mb-4">
+          <div className="grid grid-cols-7 gap-1 mb-4 scale-75 sm:scale-100 origin-center">
             {useMemo(() => Array.from({ length: 7 }, (_, col) => {
               const isDisabled = !isActive || !isMyTurn || gameWinner !== null
               return (
@@ -171,7 +171,7 @@ export default function ConnectFour({
                   key={col}
                   onClick={() => handleColumnClick(col)}
                   disabled={isDisabled}
-                  className="h-8 sm:h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
+                  className="h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
                 >
                   ↓
                 </Button>
@@ -181,13 +181,13 @@ export default function ConnectFour({
 
           {/* Game board */}
           <div className="bg-blue-900/30 p-3 sm:p-4 rounded-lg">
-            <div className="flex flex-col gap-2 sm:gap-1 mx-auto max-w-fit">
+            <div className="flex flex-col gap-1 mx-auto max-w-fit scale-75 sm:scale-100 origin-center">
               {board.map((row, rowIndex) => (
                 <div key={rowIndex} className="flex gap-2 sm:gap-1">
                   {row.map((cell, colIndex) => (
                     <div
                       key={`${rowIndex}-${colIndex}`}
-                      className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-8 h-8 sm:w-12 sm:h-12`}
+                      className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-12 h-12`}
                     />
                   ))}
                 </div>
