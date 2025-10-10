@@ -102,7 +102,12 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
           created_at,
           status,
           user_id,
-          games (name)
+          games (name),
+          users (
+            username,
+            display_name,
+            avatar_url
+          )
         `,
         )
         .eq("status", "waiting")
@@ -116,46 +121,9 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
         return
       }
 
-      // Manually fetch user data for each queue
-      const queuesWithUsers = await Promise.all(
-        (updatedQueues || []).map(async (queue) => {
-          console.log('🔍 Fetching user data for queue:', queue.id, 'user_id:', queue.user_id)
-          
-          try {
-            const { data: userData, error: userError } = await supabase
-              .from("users")
-              .select("username, display_name, avatar_url")
-              .eq("id", queue.user_id)
-              .single()
-            
-            if (userError) {
-              console.error('❌ Error fetching user data for user_id', queue.user_id, ':', userError)
-              // Return queue with null users if fetch fails
-              return {
-                ...queue,
-                users: null
-              }
-            }
-            
-            console.log('✅ User data fetched successfully:', userData)
-            
-            return {
-              ...queue,
-              users: userData
-            }
-          } catch (error) {
-            console.error('❌ Exception fetching user data for user_id', queue.user_id, ':', error)
-            return {
-              ...queue,
-              users: null
-            }
-          }
-        })
-      )
-
-      console.log("✅ Updated matchmaking queues with users:", queuesWithUsers?.length || 0, queuesWithUsers)
-      console.log("🔍 First queue user data:", queuesWithUsers?.[0]?.users)
-      setQueues(queuesWithUsers || [])
+      console.log("✅ Updated matchmaking queues with users:", updatedQueues?.length || 0, updatedQueues)
+      console.log("🔍 First queue user data:", updatedQueues?.[0]?.users)
+      setQueues(updatedQueues || [])
     } catch (error) {
       console.error("❌ Error in refreshQueues:", error)
     }
