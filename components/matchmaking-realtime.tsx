@@ -6,6 +6,7 @@ import MatchmakingQueueList from './games/matchmaking-queue-list'
 
 interface MatchmakingQueue {
   id: string
+  game_id: string
   bet_amount: number
   match_type: string
   expires_at: string
@@ -94,6 +95,7 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
         .select(
           `
           id,
+          game_id,
           bet_amount,
           match_type,
           expires_at,

@@ -150,6 +150,7 @@ export default async function GamesPage() {
     .select(
       `
       id,
+      game_id,
       bet_amount,
       match_type,
       expires_at,
@@ -171,6 +172,7 @@ export default async function GamesPage() {
     .select(
       `
       id,
+      game_id,
       bet_amount,
       match_type,
       expires_at,

@@ -57,6 +57,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
     .select(
       `
       id,
+      game_id,
       bet_amount,
       match_type,
       expires_at,

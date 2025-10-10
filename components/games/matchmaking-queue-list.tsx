@@ -8,6 +8,7 @@ import { useState } from "react"
 
 interface MatchmakingQueue {
   id: string
+  game_id: string
   bet_amount: number
   match_type: string
   expires_at: string
