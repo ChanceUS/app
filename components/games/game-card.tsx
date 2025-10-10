@@ -47,13 +47,13 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
   console.log("🎮 GameCard rendering for:", { id: game.id, name: game.name })
 
   return (
-    <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors">
-      <CardHeader className="text-center pb-4">
-        <div className="flex justify-center mb-4">
-          <div className="text-5xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
+    <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors mx-1 sm:mx-0">
+      <CardHeader className="text-center pb-3 sm:pb-4">
+        <div className="flex justify-center mb-3 sm:mb-4">
+          <div className="text-4xl sm:text-5xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
         </div>
-        <CardTitle className="text-white text-xl mb-2">{game.name}</CardTitle>
-        <CardDescription className="text-gray-400 text-sm">{game.description}</CardDescription>
+        <CardTitle className="text-white text-lg sm:text-xl mb-2">{game.name}</CardTitle>
+        <CardDescription className="text-gray-400 text-xs sm:text-sm">{game.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Game Stats */}
@@ -84,9 +84,10 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <Button
             asChild
+            size="sm"
             className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-semibold"
           >
             <Link href={`/games/${game.id}/create`}>
@@ -95,6 +96,7 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
           </Button>
           <Button
             asChild
+            size="sm"
             variant="outline"
             className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-800"
           >

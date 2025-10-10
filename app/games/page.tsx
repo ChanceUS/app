@@ -310,18 +310,19 @@ export default async function GamesPage() {
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8 relative z-10">
         {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <div>
-              <h1 className="text-4xl font-bold text-white mb-2">Games Lobby</h1>
-              <p className="text-gray-400 text-lg">Choose your game and test your skills against other players</p>
+              <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2">Games Lobby</h1>
+              <p className="text-gray-400 text-sm sm:text-lg">Choose your game and test your skills against other players</p>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
               <Button 
                 asChild
                 variant="outline"
+                size="sm"
                 className="border-gray-600 text-gray-300 hover:bg-gray-800"
               >
                 <Link href="/games">
@@ -330,6 +331,7 @@ export default async function GamesPage() {
               </Button>
               <Button
                 asChild
+                size="sm"
                 className="bg-orange-600 hover:bg-orange-700 text-white"
               >
                 <Link href={`/games/${games[0]?.id}/create`}>
@@ -341,9 +343,9 @@ export default async function GamesPage() {
         </div>
 
         {/* Games Grid */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-white mb-6">Available Games</h2>
-          <div className="grid md:grid-cols-3 gap-6">
+        <div className="mb-8 sm:mb-12">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">Available Games</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {games.map((game) => (
               <GameCard
                 key={game.id}
