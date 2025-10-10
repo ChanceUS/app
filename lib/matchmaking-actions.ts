@@ -238,6 +238,20 @@ export async function joinMatchmakingQueue(
       }
     }
 
+    // Check if user already has an active queue entry
+    const { data: existingUserQueue } = await supabase
+      .from("matchmaking_queue")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "waiting")
+      .gt("expires_at", new Date().toISOString())
+      .single()
+
+    if (existingUserQueue) {
+      console.log(`⚠️ User ${user.id} already has an active queue entry`)
+      return { error: "You are already in the matchmaking queue" }
+    }
+
     // No match found, create new matchmaking queue entry
     console.log(`⏳ No match found, creating new queue entry for user ${user.id}`)
     
@@ -261,7 +275,8 @@ export async function joinMatchmakingQueue(
 
     if (createQueueError) {
       console.error("Failed to create queue entry:", createQueueError)
-      return { error: "Failed to join matchmaking queue" }
+      console.error("Error details:", createQueueError.message, createQueueError.details, createQueueError.hint)
+      return { error: `Failed to join matchmaking queue: ${createQueueError.message}` }
     }
 
     console.log(`✅ Created queue entry:`, queueEntry)

@@ -38,7 +38,7 @@ export default function MatchmakingQueueList({ queues }: MatchmakingQueueListPro
       
       // Join the matchmaking queue - this should automatically pair with the existing queue entry
       const result = await joinMatchmakingQueue(
-        queue.games?.name === 'Math Blitz' ? 'd0c5fda9-ec91-46b4-be62-cba48b398168' : queue.games?.id || '',
+        queue.game_id,
         queue.bet_amount,
         queue.match_type as 'free' | 'tokens' | 'cash5' | 'cash10'
       )
