@@ -117,22 +117,22 @@ export default function ConnectFour({
   }
 
   return (
-    <Card className="bg-gray-900/50 border-yellow-500/20">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-white flex items-center">
+    <Card className="bg-gray-900/50 border-yellow-500/20 mx-2 sm:mx-0">
+      <CardHeader className="pb-3 sm:pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+          <CardTitle className="text-white flex items-center text-lg sm:text-xl">
             <Grid3X3 className="mr-2 h-5 w-5 text-yellow-400" />
             4 In a Row
           </CardTitle>
           <div className="flex items-center space-x-2">
             <Badge
-              className={`${currentPlayer === "player1" ? "bg-cyan-500/20 text-cyan-400" : "bg-gray-500/20 text-gray-400"}`}
+              className={`text-xs sm:text-sm ${currentPlayer === "player1" ? "bg-cyan-500/20 text-cyan-400" : "bg-gray-500/20 text-gray-400"}`}
             >
               <User className="mr-1 h-3 w-3" />
               You
             </Badge>
             <Badge
-              className={`${currentPlayer === "player2" ? "bg-yellow-500/20 text-yellow-400" : "bg-gray-500/20 text-gray-400"}`}
+              className={`text-xs sm:text-sm ${currentPlayer === "player2" ? "bg-yellow-500/20 text-yellow-400" : "bg-gray-500/20 text-gray-400"}`}
             >
               <User className="mr-1 h-3 w-3" />
               Opponent
@@ -141,15 +141,15 @@ export default function ConnectFour({
         </div>
 
         {gameWinner ? (
-          <div className="text-center">
-            <Badge className="bg-green-500/20 text-green-400 text-lg px-4 py-2">
-              <Trophy className="mr-2 h-4 w-4" />
+          <div className="text-center mt-2">
+            <Badge className="bg-green-500/20 text-green-400 text-sm sm:text-lg px-3 sm:px-4 py-1 sm:py-2">
+              <Trophy className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
               {gameWinner === "draw" ? "Draw!" : `${getPlayerName(gameWinner)} Wins!`}
             </Badge>
           </div>
         ) : (
-          <div className="text-center">
-            <p className="text-gray-400">
+          <div className="text-center mt-2">
+            <p className="text-gray-400 text-sm sm:text-base">
               {isMyTurn ? "Your turn" : "Waiting for opponent..."}
             </p>
             {!isMyTurn && (
@@ -161,9 +161,9 @@ export default function ConnectFour({
         )}
       </CardHeader>
       <CardContent>
-        <div className="space-y-2">
+        <div className="space-y-3 sm:space-y-2">
           {/* Column buttons */}
-          <div className="grid grid-cols-7 gap-1 mb-4">
+          <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-4">
             {useMemo(() => Array.from({ length: 7 }, (_, col) => {
               const isDisabled = !isActive || !isMyTurn || gameWinner !== null
               return (
@@ -171,7 +171,7 @@ export default function ConnectFour({
                   key={col}
                   onClick={() => handleColumnClick(col)}
                   disabled={isDisabled}
-                  className="h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-10 sm:h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
                 >
                   ↓
                 </Button>
@@ -180,20 +180,20 @@ export default function ConnectFour({
           </div>
 
           {/* Game board */}
-          <div className="bg-blue-900/30 p-4 rounded-lg">
-            <div className="grid grid-cols-7 gap-1">
+          <div className="bg-blue-900/30 p-3 sm:p-4 rounded-lg">
+            <div className="grid grid-cols-7 gap-1 sm:gap-1 mx-auto max-w-fit">
               {board.map((row, rowIndex) =>
                 row.map((cell, colIndex) => (
                   <div
                     key={`${rowIndex}-${colIndex}`}
-                    className={`w-12 h-12 rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)}`}
+                    className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-10 h-10 sm:w-12 sm:h-12`}
                   />
                 )),
               )}
             </div>
           </div>
 
-          <div className="text-center text-sm text-gray-400 mt-4">
+          <div className="text-center text-xs sm:text-sm text-gray-400 mt-4 px-2">
             Get four in a row horizontally, vertically, or diagonally to win!
           </div>
         </div>
