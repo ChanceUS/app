@@ -163,7 +163,7 @@ export default function ConnectFour({
       <CardContent>
         <div className="space-y-3 sm:space-y-2">
           {/* Column buttons */}
-          <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-4">
+          <div className="grid grid-cols-7 gap-2 sm:gap-1 mb-4">
             {useMemo(() => Array.from({ length: 7 }, (_, col) => {
               const isDisabled = !isActive || !isMyTurn || gameWinner !== null
               return (
@@ -181,7 +181,7 @@ export default function ConnectFour({
 
           {/* Game board */}
           <div className="bg-blue-900/30 p-3 sm:p-4 rounded-lg">
-            <div className="grid grid-cols-7 gap-1 sm:gap-1 mx-auto max-w-fit">
+            <div className="grid grid-cols-7 gap-2 sm:gap-1 mx-auto max-w-fit">
               {board.map((row, rowIndex) =>
                 row.map((cell, colIndex) => (
                   <div
