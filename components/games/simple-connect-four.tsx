@@ -289,8 +289,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   <p className="text-gray-300 mb-6">Click on column arrows to place chips</p>
                   
                   {/* Column buttons - NOW WITH REAL MULTIPLAYER LOGIC! */}
-                  <div className="text-center text-xs text-red-400 mb-2">DEBUG: SimpleConnectFour Mobile Fix</div>
-                  <div className="grid grid-cols-7 gap-3 max-w-md mx-auto mb-4">
+                  <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto mb-4">
                     {Array.from({ length: 7 }, (_, col) => {
                       // Check if column is full
                       const isColumnFull = board[col] !== null
@@ -301,7 +300,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           key={col}
                           onClick={() => dropPiece(col)}
                           disabled={!canPlay}
-                          className={`h-8 text-white text-sm rounded font-bold transition-colors flex items-center justify-center ${
+                          className={`h-8 md:h-12 text-white text-sm md:text-xl rounded font-bold transition-colors flex items-center justify-center ${
                             canPlay
                               ? 'bg-blue-600 hover:bg-blue-500 cursor-pointer'
                               : 'bg-gray-500 cursor-not-allowed opacity-50'
@@ -360,46 +359,46 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               )}
               
               {/* Game board */}
-              <div className="text-center text-xs text-red-400 mb-2">DEBUG: Game Board - Clickable Columns</div>
-              <div className="grid grid-cols-7 gap-3 max-w-md mx-auto">
-                {Array.from({ length: 7 }, (_, col) => (
-                  <div key={col} className="flex flex-col gap-3">
-                    {Array.from({ length: 6 }, (_, row) => {
-                      const i = col + (row * 7)
-                      const piece = board[i]
-                      let pieceColor = 'bg-gray-700 border-gray-600'
-                      
-                      if (piece === 'player1') {
-                        pieceColor = 'bg-red-500 border-red-400'
-                      } else if (piece === 'player2') {
-                        pieceColor = 'bg-yellow-400 border-yellow-300'
-                      }
-                      
-                      return (
-                        <div
-                          key={i}
-                          className={`w-8 h-8 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
-                            currentStatus === 'cancelled' 
-                              ? 'opacity-50' 
-                              : 'hover:scale-110'
-                          }`}
-                        />
-                      )
-                    })}
-                    {/* Clickable column area */}
+              <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto">
+                {Array.from({ length: 7 }, (_, col) => {
+                  const canPlay = isMyTurn && !winner && currentStatus === 'in_progress'
+                  
+                  return (
                     <button
+                      key={col}
                       onClick={() => dropPiece(col)}
-                      disabled={!isMyTurn || winner || currentStatus !== 'in_progress'}
-                      className={`h-6 text-xs font-bold rounded transition-colors ${
-                        isMyTurn && !winner && currentStatus === 'in_progress'
-                          ? 'bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 cursor-pointer'
-                          : 'bg-gray-500/20 text-gray-500 cursor-not-allowed'
+                      disabled={!canPlay}
+                      className={`flex flex-col gap-2 md:gap-1 p-1 rounded transition-colors ${
+                        canPlay
+                          ? 'hover:bg-blue-500/10 cursor-pointer'
+                          : 'cursor-not-allowed'
                       }`}
                     >
-                      Drop
+                      {Array.from({ length: 6 }, (_, row) => {
+                        const i = col + (row * 7)
+                        const piece = board[i]
+                        let pieceColor = 'bg-gray-700 border-gray-600'
+                        
+                        if (piece === 'player1') {
+                          pieceColor = 'bg-red-500 border-red-400'
+                        } else if (piece === 'player2') {
+                          pieceColor = 'bg-yellow-400 border-yellow-300'
+                        }
+                        
+                        return (
+                          <div
+                            key={i}
+                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
+                              currentStatus === 'cancelled' 
+                                ? 'opacity-50' 
+                                : 'hover:scale-110'
+                            }`}
+                          />
+                        )
+                      })}
                     </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               
             </div>
