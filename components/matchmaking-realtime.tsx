@@ -102,7 +102,7 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
           created_at,
           status,
           games (name),
-          users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
+          users (username, display_name, avatar_url)
         `,
         )
         .eq("status", "waiting")

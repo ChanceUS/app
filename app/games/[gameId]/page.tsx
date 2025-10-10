@@ -62,7 +62,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
       match_type,
       expires_at,
       created_at,
-      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
+      users (username, display_name, avatar_url)
     `,
     )
     .eq("game_id", params.gameId)

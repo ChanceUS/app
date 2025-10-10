@@ -157,7 +157,7 @@ export default async function GamesPage() {
       created_at,
       user_id,
       games (name),
-      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
+      users (username, display_name, avatar_url)
     `,
     )
     .eq("status", "waiting")
