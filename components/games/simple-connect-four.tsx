@@ -388,7 +388,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         return (
                           <div
                             key={i}
-                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
+                            className={`w-9 h-9 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
                               currentStatus === 'cancelled' 
                                 ? 'opacity-50' 
                                 : 'hover:scale-110'
