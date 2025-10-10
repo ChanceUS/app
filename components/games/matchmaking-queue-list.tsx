@@ -13,6 +13,7 @@ interface MatchmakingQueue {
   match_type: string
   expires_at: string
   created_at: string
+  user_id: string
   games: {
     name: string
   }
@@ -128,7 +129,7 @@ export default function MatchmakingQueueList({ queues }: MatchmakingQueueListPro
                 </Avatar>
                 <div>
                   <div className="text-white font-medium text-sm">
-                    {queue.users?.display_name || queue.users?.username || 'Loading...'}
+                    {queue.users?.display_name || queue.users?.username || `User ${queue.user_id.slice(0, 8)}...`}
                   </div>
                   <div className="text-gray-400 text-xs">
                     {queue.games?.name || 'Unknown Game'} • {getMatchTypeDisplay(queue.match_type, queue.bet_amount)}

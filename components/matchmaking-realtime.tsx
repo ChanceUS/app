@@ -119,15 +119,36 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
       // Manually fetch user data for each queue
       const queuesWithUsers = await Promise.all(
         (updatedQueues || []).map(async (queue) => {
-          const { data: userData } = await supabase
-            .from("users")
-            .select("username, display_name, avatar_url")
-            .eq("id", queue.user_id)
-            .single()
+          console.log('🔍 Fetching user data for queue:', queue.id, 'user_id:', queue.user_id)
           
-          return {
-            ...queue,
-            users: userData
+          try {
+            const { data: userData, error: userError } = await supabase
+              .from("users")
+              .select("username, display_name, avatar_url")
+              .eq("id", queue.user_id)
+              .single()
+            
+            if (userError) {
+              console.error('❌ Error fetching user data for user_id', queue.user_id, ':', userError)
+              // Return queue with null users if fetch fails
+              return {
+                ...queue,
+                users: null
+              }
+            }
+            
+            console.log('✅ User data fetched successfully:', userData)
+            
+            return {
+              ...queue,
+              users: userData
+            }
+          } catch (error) {
+            console.error('❌ Exception fetching user data for user_id', queue.user_id, ':', error)
+            return {
+              ...queue,
+              users: null
+            }
           }
         })
       )
