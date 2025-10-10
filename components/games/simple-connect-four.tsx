@@ -23,6 +23,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
   
+  // Determine which player the current user is
+  const myPlayer = currentUserId === player1Id ? 'player1' : currentUserId === player2Id ? 'player2' : null
+  
 
   // Load game state from database and check for updates
   useEffect(() => {

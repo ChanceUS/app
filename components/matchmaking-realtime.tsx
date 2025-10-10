@@ -90,10 +90,10 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
       
       console.log("🔍 All queue entries in database:", allQueues)
 
+      // Try a simpler approach - fetch queues first, then users separately
       const { data: updatedQueues, error } = await supabase
         .from("matchmaking_queue")
-        .select(
-          `
+        .select(`
           id,
           game_id,
           bet_amount,
@@ -102,14 +102,8 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
           created_at,
           status,
           user_id,
-          games (name),
-          users (
-            username,
-            display_name,
-            avatar_url
-          )
-        `,
-        )
+          games (name)
+        `)
         .eq("status", "waiting")
         .neq("user_id", currentUserId) // Don't show user's own queue entries
         .gt("expires_at", new Date().toISOString()) // Only show non-expired entries
@@ -121,10 +115,59 @@ export default function MatchmakingRealtime({ initialQueues, currentUserId }: Ma
         return
       }
 
-      console.log("✅ Updated matchmaking queues with users:", updatedQueues?.length || 0, updatedQueues)
-      console.log("🔍 First queue user data:", updatedQueues?.[0]?.users)
-      console.log("🔍 Full first queue object:", JSON.stringify(updatedQueues?.[0], null, 2))
-      setQueues(updatedQueues || [])
+      // Manually fetch user data using server-side client
+      const queuesWithUsers = await Promise.all(
+        (updatedQueues || []).map(async (queue) => {
+          try {
+            // The users table exists, let's try a different approach
+            let userData = null
+            let userError = null
+            
+            // Try to query the users table first (RLS might allow it now)
+            console.log('🔍 Querying users table for:', queue.user_id)
+            
+            const { data: usersData, error: usersError } = await supabase
+              .from("users")
+              .select("username, display_name, avatar_url")
+              .eq("id", queue.user_id)
+              .maybeSingle()
+            
+            console.log('🔍 Users query result:', { usersData, usersError })
+            
+            if (usersData && !usersError) {
+              console.log('✅ Found user in users table:', usersData)
+            } else {
+              console.log('❌ User not found in users table, using fallback')
+              // Fallback to a more user-friendly format
+              usersData = {
+                username: `player_${queue.user_id.slice(0, 8)}`,
+                display_name: `Player ${queue.user_id.slice(0, 8)}`,
+                avatar_url: null
+              }
+            }
+            
+            // Set the user data (either from auth or fallback)
+            userData = usersData
+            console.log('✅ Final user data:', userData)
+            
+            return {
+              ...queue,
+              users: userData
+            }
+          } catch (error) {
+            console.error('❌ Exception fetching user data:', error)
+            return {
+              ...queue,
+              users: null
+            }
+          }
+        })
+      )
+
+      console.log("✅ Updated matchmaking queues with users:", queuesWithUsers?.length || 0, queuesWithUsers)
+      console.log("🔍 First queue user data:", queuesWithUsers?.[0]?.users)
+      console.log("🔍 Full first queue object:", JSON.stringify(queuesWithUsers?.[0], null, 2))
+      setQueues(queuesWithUsers || [])
     } catch (error) {
       console.error("❌ Error in refreshQueues:", error)
     }
