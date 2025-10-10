@@ -289,7 +289,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   <p className="text-gray-300 mb-6">Click on column arrows to place chips</p>
                   
                   {/* Column buttons - NOW WITH REAL MULTIPLAYER LOGIC! */}
-                  <div className="grid grid-cols-7 gap-2 max-w-md mx-auto mb-4">
+                  <div className="text-center text-xs text-red-400 mb-2">DEBUG: SimpleConnectFour Mobile Fix</div>
+                  <div className="grid grid-cols-7 gap-3 max-w-md mx-auto mb-4">
                     {Array.from({ length: 7 }, (_, col) => {
                       // Check if column is full
                       const isColumnFull = board[col] !== null
@@ -300,7 +301,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           key={col}
                           onClick={() => dropPiece(col)}
                           disabled={!canPlay}
-                          className={`h-12 text-white text-xl rounded font-bold transition-colors flex items-center justify-center ${
+                          className={`h-8 text-white text-sm rounded font-bold transition-colors flex items-center justify-center ${
                             canPlay
                               ? 'bg-blue-600 hover:bg-blue-500 cursor-pointer'
                               : 'bg-gray-500 cursor-not-allowed opacity-50'
@@ -359,7 +360,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               )}
               
               {/* Game board */}
-              <div className="grid grid-cols-7 gap-1 max-w-md mx-auto">
+              <div className="text-center text-xs text-red-400 mb-2">DEBUG: Game Board - Smaller Circles</div>
+              <div className="grid grid-cols-7 gap-3 max-w-md mx-auto">
                 {Array.from({ length: 42 }, (_, i) => {
                   const piece = board[i]
                   let pieceColor = 'bg-gray-700 border-gray-600'
@@ -373,7 +375,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   return (
                     <div
                       key={i}
-                      className={`w-12 h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
+                      className={`w-8 h-8 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
                         currentStatus === 'cancelled' 
                           ? 'opacity-50' 
                           : 'hover:scale-110'
