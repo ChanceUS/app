@@ -157,7 +157,7 @@ export default async function GamesPage() {
       created_at,
       user_id,
       games (name),
-      users (username, display_name, avatar_url)
+      users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
     `,
     )
     .eq("status", "waiting")
@@ -262,6 +262,7 @@ export default async function GamesPage() {
       bet: q.bet_amount, 
       type: q.match_type,
       user: q.users?.username || 'Unknown',
+      userData: q.users,
       expires: q.expires_at
     }))
   })
