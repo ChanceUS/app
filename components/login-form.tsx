@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { signIn, signInWithGoogle } from "@/lib/actions"
+import { AuthRateLimiter, getRateLimitMessage } from "@/lib/auth-utils"
 import { toast } from "sonner"
 
 /** Email/password submit button that DOES need useFormStatus */
@@ -97,7 +98,7 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
       let errorMessage = "Login failed. Please try again."
       
       if (error === 'rate_limit') {
-        errorMessage = "Too many login attempts. Please wait a moment and try again."
+        errorMessage = "Rate limit exceeded. Please wait 15-30 minutes before trying again. This is a temporary restriction to prevent abuse."
       } else if (error === 'invalid_code') {
         errorMessage = "Login session expired. Please try logging in again."
       } else if (error === 'auth_error') {

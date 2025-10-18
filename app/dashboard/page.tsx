@@ -4,7 +4,9 @@ import Header from "@/components/navigation/header"
 import StatsCard from "@/components/dashboard/stats-card"
 import QuickActions from "@/components/dashboard/quick-actions"
 import RecentMatches from "@/components/dashboard/recent-matches"
-import { Wallet, Trophy, Target, TrendingUp } from "lucide-react"
+import OnlineUsersCount from "@/components/dashboard/online-users-count"
+import DashboardClient from "@/components/dashboard/dashboard-client"
+import { Wallet, Trophy, Users, TrendingUp } from "lucide-react"
 import Image from "next/image"
 
 export default async function DashboardPage() {
@@ -40,6 +42,7 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-950 relative">
       <Header user={user} />
+      <DashboardClient />
 
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
@@ -68,15 +71,15 @@ export default async function DashboardPage() {
           <StatsCard
             title="Games Won"
             value={user.total_games_won || 0}
-            description={`Out of ${user.total_games_played || 0} total`}
+            description="Victories achieved"
             icon={Trophy}
           />
 
           <StatsCard
-            title="Win Rate"
-            value={`${user.win_rate || 0}%`}
-            description="Your success percentage"
-            icon={Target}
+            title="Users Online"
+            value={<OnlineUsersCount />}
+            description="Currently playing"
+            icon={Users}
           />
 
           <StatsCard
@@ -88,7 +91,6 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mb-8">
-          <h2 className="text-xl font-bold text-white mb-6">Quick Play</h2>
           <QuickActions />
         </div>
 
