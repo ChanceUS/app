@@ -1,7 +1,7 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Trophy, Zap, Users, Wallet, Target, TrendingUp } from "lucide-react"
+import { Trophy, Zap, Users } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import Header from "@/components/navigation/header"
@@ -48,91 +48,19 @@ export default async function Home() {
     }
   }
 
-  // If user is logged in, show dashboard, otherwise show landing page
+  // If user is logged in, redirect to dashboard
   if (user) {
-    // Import dashboard components
-    const { default: QuickActions } = await import("@/components/dashboard/quick-actions")
-    const { default: RecentMatches } = await import("@/components/dashboard/recent-matches")
-    const { default: StatsCard } = await import("@/components/dashboard/stats-card")
-    
-    return (
-      <div className="min-h-screen bg-gray-950">
-        <Header user={user} />
-
-        <main className="max-w-[1600px] mx-auto px-8 sm:px-12 lg:px-16 py-16">
-          <div className="mb-12 fade-in">
-            <div className="flex items-center space-x-6 mb-6">
-              <Image src="/chanceus-eagle.png" alt="ChanceUS" width={80} height={80} className="h-16 w-16" />
-              <div>
-                <h1 className="text-4xl font-bold text-white">
-                  Welcome back, <span className="text-orange-500">{user.display_name || user.username}</span>!
-                </h1>
-                <p className="text-gray-400 text-lg">Ready to challenge your friends in skill-based games?</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 mb-16">
-            <StatsCard
-              title="Token Balance"
-              value="44,560"
-              description="Available for betting"
-              icon={Wallet}
-              trend={{
-                value: 12,
-                isPositive: true
-              }}
-            />
-            <StatsCard
-              title="Games Won"
-              value="17"
-              description="Out of 29 total"
-              icon={Trophy}
-              trend={{
-                value: 3,
-                isPositive: true
-              }}
-            />
-            <StatsCard
-              title="Win Rate"
-              value="65.38%"
-              description="Your success percentage"
-              icon={Target}
-              trend={{
-                value: 5.2,
-                isPositive: true
-              }}
-            />
-            <StatsCard
-              title="Rank"
-              value="#247"
-              description="Global leaderboard"
-              icon={TrendingUp}
-              trend={{
-                value: 12,
-                isPositive: true
-              }}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
-            <div className="lg:col-span-2">
-              <QuickActions />
-            </div>
-            <div>
-              <RecentMatches userId={user.id} />
-            </div>
-          </div>
-        </main>
-      </div>
-    )
+    redirect("/dashboard")
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-gray-950 relative">
       <Header />
 
-      <div className="relative overflow-hidden py-20">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+
+      <div className="relative overflow-hidden py-20 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-12">
             <div className="flex justify-center mb-8">
@@ -171,7 +99,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             <span className="text-orange-500">Skill-Based</span> <span className="text-white">Competition</span>
@@ -221,7 +149,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="py-20">
+      <div className="py-20 relative z-10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
           <h2 className="text-4xl md:text-5xl font-bold mb-8">
             <span className="text-orange-500">Ready to start playing?</span>

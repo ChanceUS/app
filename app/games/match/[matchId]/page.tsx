@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Header from "@/components/navigation/header"
-import SimpleConnectFour from "@/components/games/simple-connect-four"
+import EnhancedMatchInterface from "@/components/games/enhanced-match-interface"
 import StartGameButton from "@/components/games/start-game-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -205,13 +205,13 @@ export default function MatchPage({ params }: MatchPageProps) {
         )}
 
         {/* Game Interface */}
-        <SimpleConnectFour
-          matchId={match.id}
-          betAmount={match.bet_amount}
-          status={match.status}
-          currentUserId={user?.id}
-          player1Id={match.player1_id}
-          player2Id={match.player2_id}
+        <EnhancedMatchInterface
+          match={match}
+          currentUser={user}
+          onMatchComplete={(winnerId) => {
+            console.log('Match completed, winner:', winnerId)
+            // The component will handle the match completion
+          }}
         />
 
         {/* Match Actions */}

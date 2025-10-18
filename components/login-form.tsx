@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { signIn, signInWithGoogle } from "@/lib/actions"
+import { toast } from "sonner"
 
 /** Email/password submit button that DOES need useFormStatus */
 function SubmitButton() {
@@ -91,8 +92,20 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
     const error = urlParams.get('error')
     if (error) {
       console.error("Login error from URL:", error)
-      // Show error message to user
-      alert(`Login Error: ${error}`)
+      
+      // Show specific error messages
+      let errorMessage = "Login failed. Please try again."
+      
+      if (error === 'rate_limit') {
+        errorMessage = "Too many login attempts. Please wait a moment and try again."
+      } else if (error === 'invalid_code') {
+        errorMessage = "Login session expired. Please try logging in again."
+      } else if (error === 'auth_error') {
+        errorMessage = "Authentication failed. Please try again."
+      }
+      
+      // Use toast instead of alert for better UX
+      toast.error(errorMessage)
     }
   }, [])
 

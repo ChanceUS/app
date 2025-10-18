@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -51,9 +51,28 @@ export default function TriviaChallenge({
 
   // Initialize game state from game data or create new game
   useEffect(() => {
-    if (gameData?.gameState) {
-      setGameState(gameData.gameState)
+    console.log('🔄 Trivia component useEffect triggered with gameData:', gameData)
+
+    // Check if we have saved game state (either in gameData.gameState or directly in gameData)
+    const savedGameState = gameData?.gameState || gameData
+    if (savedGameState && (savedGameState.player1 || savedGameState.player2 || savedGameState.currentRound)) {
+      console.log('🔄 Loading trivia game state from database:', savedGameState)
+      setGameState(savedGameState)
+      
+      // If the current player doesn't have a question, generate one
+      const currentPlayerState = currentPlayer === "player1" ? "player1" : "player2"
+      const currentQuestion = savedGameState[currentPlayerState]?.currentQuestion
+      console.log('🔄 Current player:', currentPlayerState, 'Current question:', currentQuestion)
+      
+      if (!currentQuestion && !savedGameState.gameWinner) {
+        console.log('🔄 No current question found for player, generating new one...')
+        // Use setTimeout to ensure state is updated first
+        setTimeout(() => {
+          generateNewQuestion()
+        }, 100)
+      }
     } else {
+      console.log('🔄 No saved game state, initializing new game...')
       // Initialize new game
       const newGameState = {
         player1: { score: 0, currentQuestion: null, answeredQuestions: 0, correctAnswers: 0, averageTime: 0 },
@@ -65,15 +84,13 @@ export default function TriviaChallenge({
       setGameState(newGameState)
       
       // Generate first question for current player
-      if (isMyTurn) {
-        generateNewQuestion()
-      }
+      generateNewQuestion()
     }
-  }, [gameData?.gameState, isMyTurn])
+  }, [gameData, currentPlayer]) // Changed to depend on gameData directly
 
   // Timer countdown
   useEffect(() => {
-    if (!isActive || !isMyTurn || gameState.gameWinner) return
+    if (!isActive || gameState.gameWinner) return
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -87,7 +104,7 @@ export default function TriviaChallenge({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isActive, isMyTurn, gameState.gameWinner])
+  }, [isActive, gameState.gameWinner]) // Removed isMyTurn dependency
 
   const generateNewQuestion = () => {
     const question = getRandomTriviaQuestion()
@@ -106,7 +123,7 @@ export default function TriviaChallenge({
   }
 
   const handleAnswer = (selectedAnswerIndex: number) => {
-    if (!isMyTurn || gameState.gameWinner) return
+    if (gameState.gameWinner) return
 
     const currentPlayerState = currentPlayer === "player1" ? "player1" : "player2"
     const currentQuestion = gameState[currentPlayerState].currentQuestion
@@ -257,7 +274,7 @@ export default function TriviaChallenge({
         </div>
 
         {/* Current Question */}
-        {isMyTurn && getCurrentPlayerState().currentQuestion && (
+        {getCurrentPlayerState().currentQuestion && (
           <div className="space-y-4">
             <div className="text-center">
               <Badge className="bg-purple-500/20 text-purple-400 mb-2">
@@ -286,19 +303,6 @@ export default function TriviaChallenge({
           </div>
         )}
 
-        {/* Waiting for Opponent */}
-        {!isMyTurn && (
-          <div className="text-center space-y-4">
-            <div className="text-xl text-gray-400">
-              Waiting for opponent to answer...
-            </div>
-            <div className="flex justify-center">
-              <div className="w-4 h-4 bg-purple-400 rounded-full animate-pulse mx-2"></div>
-              <div className="w-4 h-4 bg-purple-400 rounded-full animate-pulse mx-2" style={{ animationDelay: '0.2s' }}></div>
-              <div className="w-4 h-4 bg-purple-400 rounded-full animate-pulse mx-2" style={{ animationDelay: '0.4s' }}></div>
-            </div>
-          </div>
-        )}
 
         {/* Game Instructions */}
         <div className="text-center text-sm text-gray-400">

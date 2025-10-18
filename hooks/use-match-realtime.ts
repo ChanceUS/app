@@ -23,7 +23,6 @@ export function useMatchRealtime({
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-
   // Fetch initial match data
   const fetchMatch = useCallback(async () => {
     try {
@@ -35,10 +34,11 @@ export function useMatchRealtime({
 
       if (error) throw error
       setMatch(data)
+      onMatchUpdate?.(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch match')
     }
-  }, [matchId])
+  }, [matchId, onMatchUpdate])
 
   // Use polling only (Realtime disabled due to binding issues)
   useEffect(() => {
@@ -46,8 +46,7 @@ export function useMatchRealtime({
       return
     }
     
-    console.log('🔌 Using polling only (Realtime disabled due to binding issues)')
-    setError('Using polling fallback - Realtime disabled due to binding issues')
+    console.log('🔌 Using polling for match updates')
     
     // Fetch initial data
     fetchMatch()

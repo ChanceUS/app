@@ -702,19 +702,41 @@ export default function EnhancedMatchInterface({
 
   // Handle game move
   const handleGameMove = useCallback(async (moveData: any) => {
-    if (!isMyTurn || gameState.status !== 'playing') return
+    // For trivia games, allow moves regardless of turn
+    // For other games, check isMyTurn
+    const isTriviaGame = game?.name?.toLowerCase().trim() === 'trivia challenge'
+    if (!isTriviaGame && (!isMyTurn || gameState.status !== 'playing')) return
+    if (isTriviaGame && gameState.status !== 'playing') return
 
     try {
-      const newGameData = {
-        ...gameState.gameData,
-        ...moveData,
-        lastMove: {
-          player: currentUser.id,
-          timestamp: new Date().toISOString(),
-          data: moveData
+      let newGameData
+      
+      if (isTriviaGame) {
+        // For trivia games, the moveData contains the full gameState
+        newGameData = {
+          ...gameState.gameData,
+          gameState: moveData.gameState,
+          lastMove: {
+            player: currentUser.id,
+            timestamp: new Date().toISOString(),
+            data: moveData
+          }
+        }
+      } else {
+        // For other games, spread the move data normally
+        newGameData = {
+          ...gameState.gameData,
+          ...moveData,
+          lastMove: {
+            player: currentUser.id,
+            timestamp: new Date().toISOString(),
+            data: moveData
+          }
         }
       }
 
+      console.log('🔄 Saving trivia game data to database:', newGameData)
+      
       await updateMatch({
         game_data: newGameData
       })
@@ -725,12 +747,14 @@ export default function EnhancedMatchInterface({
         timestamp: new Date().toISOString()
       })
 
-      // Switch turns
-      setIsMyTurn(false)
-      setGameState(prev => ({
-        ...prev,
-        currentPlayer: prev.currentPlayer === match.player1_id ? (match.player2_id || null) : match.player1_id
-      }))
+      // Switch turns (only for turn-based games, not trivia)
+      if (!isTriviaGame) {
+        setIsMyTurn(false)
+        setGameState(prev => ({
+          ...prev,
+          currentPlayer: prev.currentPlayer === match.player1_id ? (match.player2_id || null) : match.player1_id
+        }))
+      }
     } catch (error) {
       console.error('Failed to make move:', error)
     }
@@ -831,7 +855,10 @@ export default function EnhancedMatchInterface({
       
       // Render the correct game component based on game type
       console.log('🎮 Game name for switch:', game?.name)
-      switch (game?.name?.toLowerCase()) {
+      const gameName = game?.name?.toLowerCase().trim()
+      console.log('🎮 Normalized game name:', gameName)
+      
+      switch (gameName) {
         case 'math blitz':
           return <MultiplayerMathBlitz
             matchId={match.id}
@@ -856,11 +883,22 @@ export default function EnhancedMatchInterface({
             isMyTurn={isMyTurn}
           />
         case 'trivia challenge':
+          console.log('🎮 Rendering Trivia Challenge with props:', {
+            isActive: true,
+            currentPlayer: currentUser.id === match.player1_id ? "player1" : "player2",
+            isMyTurn: true, // Always allow trivia questions for both players
+            gameState: gameState.status,
+            matchStatus: match.status,
+            gameName: game?.name,
+            normalizedGameName: gameName
+          })
           return <TriviaChallenge
             onGameEnd={handleGameComplete}
             isActive={true}
             currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={true}
+            isMyTurn={true} // Always allow trivia questions for both players
+            onMove={handleGameMove}
+            gameData={gameState.gameData}
           />
         default:
           console.log('🎮 Unknown game type, falling back to Math Blitz. Game name was:', game?.name)
@@ -889,7 +927,9 @@ export default function EnhancedMatchInterface({
       
       // Render the correct game component based on game type
       console.log('🎮 Fallback rendering game:', game?.name)
-      switch (game?.name?.toLowerCase()) {
+      const fallbackGameName = game?.name?.toLowerCase().trim()
+      console.log('🎮 Fallback normalized game name:', fallbackGameName)
+      switch (fallbackGameName) {
         case 'math blitz':
           return <MultiplayerMathBlitz
             matchId={match.id}
@@ -907,11 +947,22 @@ export default function EnhancedMatchInterface({
             isMyTurn={isMyTurn}
           />
         case 'trivia challenge':
+          console.log('🎮 Fallback: Rendering Trivia Challenge with props:', {
+            isActive: true,
+            currentPlayer: currentUser.id === match.player1_id ? "player1" : "player2",
+            isMyTurn: true, // Always allow trivia questions for both players
+            gameState: gameState.status,
+            matchStatus: match.status,
+            gameName: game?.name,
+            normalizedGameName: fallbackGameName
+          })
           return <TriviaChallenge
             onGameEnd={handleGameComplete}
             isActive={true}
             currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={true}
+            isMyTurn={true} // Always allow trivia questions for both players
+            onMove={handleGameMove}
+            gameData={gameState.gameData}
           />
         default:
           console.log('🎮 Fallback: Unknown game type, falling back to Math Blitz. Game name was:', game?.name)
@@ -926,8 +977,10 @@ export default function EnhancedMatchInterface({
     } else {
       // Fallback to single-player games (only when no second player)
       console.log('🎮 Rendering single-player game:', game?.name)
+      const singlePlayerGameName = game?.name?.toLowerCase().trim()
+      console.log('🎮 Single-player normalized game name:', singlePlayerGameName)
       
-      switch (game?.name?.toLowerCase()) {
+      switch (singlePlayerGameName) {
         case 'math blitz':
           return <MathBlitz 
             savedGameData={match.game_data}
@@ -1139,43 +1192,6 @@ export default function EnhancedMatchInterface({
           </Alert>
         )}
 
-        {/* Game Component - ALWAYS RENDER */}
-        <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4">
-          <h3 className="text-white text-lg mb-4">Connect 4 Game Board</h3>
-          <div className="text-gray-300 mb-4">
-            <p>Match ID: {match.id}</p>
-            <p>Player 1: {match.player1_id}</p>
-            <p>Player 2: {match.player2_id || 'No player 2 yet'}</p>
-            <p>Game State: {gameState.status}</p>
-            <p>Has Player 2: {match.player2_id ? 'Yes' : 'No'}</p>
-          </div>
-          {/* Force render Connect 4 directly */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h4 className="text-white mb-4">Connect 4 Game</h4>
-            <div className="text-center text-gray-300">
-              <p>Game is ready to play!</p>
-              <p>Click on column arrows to place chips</p>
-              <div className="mt-4 grid grid-cols-7 gap-2 max-w-md mx-auto">
-                {Array.from({ length: 7 }, (_, col) => (
-                  <button
-                    key={col}
-                    className="h-8 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded"
-                  >
-                    ↓
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4 grid grid-cols-7 gap-2 max-w-md mx-auto">
-                {Array.from({ length: 42 }, (_, i) => (
-                  <div
-                    key={i}
-                    className="w-8 h-8 bg-gray-700 rounded-full border-2 border-gray-600"
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Join Notification */}
         {showJoinNotification && (
@@ -1345,14 +1361,7 @@ export default function EnhancedMatchInterface({
         )}
 
         {/* Game Interface */}
-        {(gameState.status === 'playing' || gameState.status === 'completed') && (
-          <div>
-            {renderGame()}
-          </div>
-        )}
-        
-        {/* Show countdown in game interface when countdown is active */}
-        {gameState.status === 'countdown' && (
+        {(gameState.status === 'playing' || gameState.status === 'completed' || gameState.status === 'countdown' || gameState.status === 'waiting') && (
           <div>
             {renderGame()}
           </div>

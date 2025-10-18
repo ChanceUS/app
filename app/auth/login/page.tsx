@@ -3,11 +3,12 @@ import { redirect } from "next/navigation"
 import LoginForm from "@/components/login-form"
 
 interface LoginPageProps {
-  searchParams: { redirect?: string }
+  searchParams: Promise<{ redirect?: string }>
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  console.log("🔍 DEBUG: Login page loaded with searchParams:", searchParams)
+  const params = await searchParams
+  console.log("🔍 DEBUG: Login page loaded with searchParams:", params)
   
   // If Supabase is not configured, show setup message directly
   if (!isSupabaseConfigured) {
@@ -26,14 +27,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   // If user is logged in, redirect to original URL or dashboard
   if (session) {
-    const redirectUrl = searchParams.redirect || "/dashboard"
+    const redirectUrl = params.redirect || "/dashboard"
     console.log("🔍 DEBUG: User already logged in, redirecting to:", redirectUrl)
     redirect(redirectUrl)
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black px-4 py-12 sm:px-6 lg:px-8">
-      <LoginForm redirectUrl={searchParams.redirect} />
+    <div className="flex min-h-screen items-center justify-center bg-gray-950 relative">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+      
+      <div className="relative z-10 px-4 py-12 sm:px-6 lg:px-8">
+        <LoginForm redirectUrl={params.redirect} />
+      </div>
     </div>
   )
 }
