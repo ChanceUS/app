@@ -29,14 +29,9 @@ export function useUserActivity() {
 
     const updateUserActivity = async () => {
       try {
-        // Update user's last_seen timestamp
-        await supabase
-          .from('users')
-          .update({ 
-            last_seen: new Date().toISOString(),
-            is_online: true 
-          })
-          .eq('id', user.id)
+        // Skip activity tracking for now since columns don't exist
+        // This prevents the 400 errors
+        console.log('User activity tracking disabled - database columns missing')
       } catch (error) {
         console.error('Error updating user activity:', error)
       }
@@ -62,15 +57,8 @@ export function useUserActivity() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       
-      // Mark user as offline when they leave
-      supabase
-        .from('users')
-        .update({ is_online: false })
-        .eq('id', user.id)
-        .then(() => {
-          console.log('User marked as offline')
-        })
-        .catch(console.error)
+      // Skip offline marking for now since columns don't exist
+      console.log('User offline tracking disabled - database columns missing')
     }
   }, [user])
 }
