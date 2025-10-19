@@ -14,11 +14,16 @@ interface SimpleConnectFourProps {
 
 export default function SimpleConnectFour({ matchId, betAmount, status, currentUserId, player1Id, player2Id }: SimpleConnectFourProps) {
   const [board, setBoard] = useState(Array(42).fill(null))
-  const [currentStatus, setCurrentStatus] = useState(status)
+  const [currentStatus, setCurrentStatus] = useState<string>(status)
   const [isLoading, setIsLoading] = useState(false)
   const [currentPlayer, setCurrentPlayer] = useState<'player1' | 'player2'>('player1')
   const [winner, setWinner] = useState<'player1' | 'player2' | 'draw' | null>(null)
   const [playerNames, setPlayerNames] = useState<{player1: string, player2: string}>({player1: 'Player 1', player2: 'Player 2'})
+  
+  // Move history for viewing previous moves
+  const [moveHistory, setMoveHistory] = useState<Array<{board: (string | null)[], move: number, player: string, moveNumber: number}>>([])
+  const [viewingHistory, setViewingHistory] = useState(false)
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1)
   
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
@@ -73,6 +78,41 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             // Update board if different
             if (gameData.board && JSON.stringify(gameData.board) !== JSON.stringify(board)) {
               setBoard(gameData.board)
+              
+              // Reconstruct move history from current board state
+              if (gameData.board && moveHistory.length === 0) {
+                const reconstructedHistory: Array<{board: (string | null)[], move: number, player: string, moveNumber: number}> = []
+                const currentBoard = gameData.board
+                
+                // Count pieces to determine how many moves have been made
+                const pieceCount = currentBoard.filter((piece: any) => piece !== null).length
+                
+                // Reconstruct moves by analyzing the board
+                let tempBoard = Array(42).fill(null)
+                for (let moveNum = 1; moveNum <= pieceCount; moveNum++) {
+                  const player = moveNum % 2 === 1 ? 'player1' : 'player2'
+                  
+                  // Find the next piece to place by comparing with current board
+                  for (let col = 0; col < 7; col++) {
+                    for (let row = 5; row >= 0; row--) {
+                      const index = row * 7 + col
+                      if (currentBoard[index] === player && tempBoard[index] === null) {
+                        tempBoard[index] = player
+                        reconstructedHistory.push({
+                          board: [...tempBoard],
+                          move: col,
+                          player: player,
+                          moveNumber: moveNum
+                        })
+                        break
+                      }
+                    }
+                    if (reconstructedHistory.length === moveNum) break
+                  }
+                }
+                
+                setMoveHistory(reconstructedHistory)
+              }
             }
             
             // Update current player if different
@@ -132,6 +172,15 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         const newBoard = [...board]
         newBoard[index] = currentPlayer
         setBoard(newBoard)
+        
+        // Add move to history
+        const moveNumber = moveHistory.length + 1
+        setMoveHistory(prev => [...prev, {
+          board: [...newBoard],
+          move: column,
+          player: currentPlayer,
+          moveNumber: moveNumber
+        }])
         
         // Save to database for opponent sync
         const nextPlayer = currentPlayer === 'player1' ? 'player2' : 'player1'
@@ -331,7 +380,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                     {Array.from({ length: 7 }, (_, col) => {
                       // Check if column is full
                       const isColumnFull = board[col] !== null
-                      const canPlay = !isColumnFull && !winner && isMyTurn && currentStatus === 'in_progress'
+                      const canPlay = !isColumnFull && !winner && isMyTurn && currentStatus === 'in_progress' && !viewingHistory
                       
                       return (
                         <button
@@ -363,7 +412,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           <span className="text-green-400">{playerNames.player1} Wins! 🎉</span>
                         )}
                       </div>
-                    ) : currentStatus === 'completed' ? (
+                    ) : (currentStatus as string) === 'completed' ? (
                       <div className="text-2xl font-bold">
                         {winner ? (
                           winner === 'draw' ? (
@@ -413,9 +462,18 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               )}
               
               {/* Game board */}
+              {viewingHistory && currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length && (
+                <div className="text-center mb-4">
+                  <div className="inline-flex items-center px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-full">
+                    <span className="text-blue-400 text-sm font-medium">
+                      📖 Viewing Move {currentHistoryIndex + 1} of {moveHistory.length}
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto">
                 {Array.from({ length: 7 }, (_, col) => {
-                  const canPlay = isMyTurn && !winner && currentStatus === 'in_progress'
+                  const canPlay = isMyTurn && !winner && currentStatus === 'in_progress' && !viewingHistory
                   
                   return (
                     <button
@@ -430,7 +488,11 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                     >
                       {Array.from({ length: 6 }, (_, row) => {
                         const i = col + (row * 7)
-                        const piece = board[i]
+                        // Use historical board if viewing history, otherwise use current board
+                        const displayBoard = viewingHistory && currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length 
+                          ? moveHistory[currentHistoryIndex].board 
+                          : board
+                        const piece = displayBoard[i]
                         let pieceColor = 'bg-gray-700 border-gray-600'
                         
                         if (piece === 'player1') {
@@ -445,7 +507,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                             className={`w-9 h-9 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
                               currentStatus === 'cancelled' 
                                 ? 'opacity-50' 
-                                : 'hover:scale-110'
+                                : viewingHistory 
+                                  ? 'opacity-80' // Slightly dimmed when viewing history
+                                  : 'hover:scale-110'
                             }`}
                           />
                         )
@@ -454,6 +518,103 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   )
                 })}
               </div>
+              
+              {/* Move History Viewer */}
+              <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-white">
+                    Move History {moveHistory.length > 0 && <span className="text-blue-400 text-sm">({moveHistory.length} moves)</span>}
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setViewingHistory(!viewingHistory)}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                    >
+                      {viewingHistory ? 'Hide History' : 'View History'}
+                    </button>
+                    {viewingHistory && moveHistory.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setViewingHistory(false)
+                          setCurrentHistoryIndex(-1)
+                        }}
+                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+                      >
+                        Back to Current
+                      </button>
+                    )}
+                  </div>
+                </div>
+                  
+                  {viewingHistory && (
+                    <div className="space-y-4">
+                      {moveHistory.length === 0 ? (
+                        <div className="text-center py-8">
+                          <p className="text-gray-400 text-lg">No moves yet</p>
+                          <p className="text-gray-500 text-sm mt-2">Make your first move to start tracking the game history!</p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* History Navigation */}
+                          <div className="flex items-center justify-between">
+                            <button
+                              onClick={() => setCurrentHistoryIndex(Math.max(0, currentHistoryIndex - 1))}
+                              disabled={currentHistoryIndex <= 0}
+                              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded transition-colors"
+                            >
+                              ← Previous
+                            </button>
+                            
+                            <span className="text-gray-300 text-sm">
+                              Move {currentHistoryIndex + 1} of {moveHistory.length}
+                            </span>
+                            
+                            <button
+                              onClick={() => setCurrentHistoryIndex(Math.min(moveHistory.length - 1, currentHistoryIndex + 1))}
+                              disabled={currentHistoryIndex >= moveHistory.length - 1}
+                              className="px-3 py-1 bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded transition-colors"
+                            >
+                              Next →
+                            </button>
+                          </div>
+                      
+                      {/* Current Move Info */}
+                      {currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length && (
+                        <div className="text-center">
+                          <p className="text-gray-300 text-sm">
+                            Move {moveHistory[currentHistoryIndex].moveNumber}: {moveHistory[currentHistoryIndex].player === 'player1' ? playerNames.player1 : playerNames.player2} placed in column {moveHistory[currentHistoryIndex].move + 1}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Board shows historical state automatically */}
+                      
+                      {/* Move List */}
+                      <div className="max-h-32 overflow-y-auto">
+                        <div className="text-sm text-gray-400 mb-2">All Moves:</div>
+                        <div className="space-y-1">
+                          {moveHistory.map((move, index) => (
+                            <div
+                              key={index}
+                              className={`p-2 rounded cursor-pointer transition-colors ${
+                                index === currentHistoryIndex 
+                                  ? 'bg-blue-600/20 border border-blue-500' 
+                                  : 'bg-gray-700/50 hover:bg-gray-600/50'
+                              }`}
+                              onClick={() => setCurrentHistoryIndex(index)}
+                            >
+                              <span className="text-white text-sm">
+                                Move {move.moveNumber}: {move.player === 'player1' ? playerNames.player1 : playerNames.player2} → Column {move.move + 1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               
             </div>
           </div>

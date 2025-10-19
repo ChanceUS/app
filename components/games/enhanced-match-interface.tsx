@@ -145,13 +145,15 @@ export default function EnhancedMatchInterface({
               completed_at: matchData.completed_at
             }))
             
-            // Update game state based on match status
+            // Update game state based on match status, but don't interfere with countdown
             if (matchData.status === 'in_progress' && gameState.status === 'waiting') {
               console.log('🎮 Match started! Updating game state to playing...')
               setGameState(prev => ({
                 ...prev,
                 status: 'playing'
               }))
+            } else if (matchData.status === 'in_progress' && gameState.status === 'countdown') {
+              console.log('🔄 Match in progress but countdown active - skipping state update')
             }
           }
           
@@ -200,19 +202,24 @@ export default function EnhancedMatchInterface({
     })
     setLocalMatch(updatedMatch)
     
-    // Update game state if match status changed
+    // Update game state if match status changed, but don't interfere with countdown
     if (updatedMatch.status !== localMatch.status) {
       console.log('🔄 Updating game state due to status change:', {
         from: localMatch.status,
         to: updatedMatch.status,
-        newGameState: updatedMatch.status === 'completed' ? 'completed' : 
-                      updatedMatch.status === 'in_progress' ? 'playing' : 'waiting'
+        currentGameState: gameState.status
       })
-      setGameState(prev => ({
-        ...prev,
-        status: updatedMatch.status === 'completed' ? 'completed' : 
-                updatedMatch.status === 'in_progress' ? 'playing' : prev.status
-      }))
+      
+      // Don't reset game state if we're in countdown
+      if (gameState.status !== 'countdown') {
+        setGameState(prev => ({
+          ...prev,
+          status: updatedMatch.status === 'completed' ? 'completed' : 
+                  updatedMatch.status === 'in_progress' ? 'playing' : prev.status
+        }))
+      } else {
+        console.log('🔄 Skipping game state update - countdown in progress')
+      }
     }
   }, [localMatch.status])
 
@@ -288,6 +295,11 @@ export default function EnhancedMatchInterface({
     setCountdown(3)
     console.log('🔢 Countdown set to 3')
     
+    // Clear any existing interval first
+    if (countdownInterval) {
+      clearInterval(countdownInterval)
+    }
+    
     const interval = setInterval(() => {
       setCountdown(prev => {
         console.log('⏰ Countdown tick:', prev)
@@ -355,13 +367,11 @@ export default function EnhancedMatchInterface({
     }
   }, [isPlayer1, currentUser.id, match.player1_id, match.id, supabase, gameState, localMatch.status])
 
-  // Poll for countdown updates (for Player 2 to sync with Player 1's countdown)
+  // Simplified countdown sync for Player 2
   useEffect(() => {
-    if (!isPlayer2 || countdown !== null) return // Only for Player 2 and if not already in countdown
+    if (!isPlayer2 || countdown !== null) return
 
-    console.log('🔍 Player 2 starting countdown polling...')
-
-    const pollForCountdown = async () => {
+    const syncWithCountdown = async () => {
       try {
         const { data: matchData, error } = await supabase
           .from('matches')
@@ -369,33 +379,27 @@ export default function EnhancedMatchInterface({
           .eq('id', match.id)
           .single()
 
-        if (error) {
-          console.error('Error polling for countdown:', error)
-          return
-        }
+        if (error) return
 
         const gameData = matchData?.game_data
-        console.log('🔍 Player 2 polling - gameData:', {
-          countdown_started: gameData?.countdown_started,
-          countdown_start_time: gameData?.countdown_start_time,
-          hasCountdown: !!countdown
-        })
-
         if (gameData?.countdown_started && !countdown) {
-          console.log('🔢 Player 2 detected countdown start!')
+          console.log('🔢 Player 2 syncing with countdown')
           const countdownStartTime = new Date(gameData.countdown_start_time)
           const now = new Date()
           const elapsedSeconds = Math.floor((now.getTime() - countdownStartTime.getTime()) / 1000)
           
-          console.log('🔢 Countdown timing:', { elapsedSeconds, remaining: 3 - elapsedSeconds })
-          
           if (elapsedSeconds < 3) {
-            // Countdown still in progress, sync with it
+            // Sync with remaining time
             const remainingCountdown = 3 - elapsedSeconds
             setCountdown(remainingCountdown)
             setGameState(prev => ({ ...prev, status: 'countdown' }))
             
-            // Start countdown from current position
+            // Clear any existing interval first
+            if (countdownInterval) {
+              clearInterval(countdownInterval)
+            }
+            
+            // Start single countdown timer
             const interval = setInterval(() => {
               setCountdown(prev => {
                 if (prev === null || prev <= 1) {
@@ -409,19 +413,19 @@ export default function EnhancedMatchInterface({
             }, 1000)
             setCountdownInterval(interval)
           } else {
-            // Countdown already finished, start match immediately
-            console.log('🔢 Countdown already finished, starting match immediately')
+            // Countdown already finished
             setGameState(prev => ({ ...prev, status: 'playing' }))
             startActualMatch()
           }
         }
       } catch (error) {
-        console.error('Error in countdown polling:', error)
+        console.error('Error syncing countdown:', error)
       }
     }
 
-    // Poll every 200ms for faster countdown detection
-    const interval = setInterval(pollForCountdown, 200)
+    // Check once immediately, then poll every 500ms
+    syncWithCountdown()
+    const interval = setInterval(syncWithCountdown, 500)
     
     return () => clearInterval(interval)
   }, [isPlayer2, countdown, match.id, supabase])
@@ -442,34 +446,7 @@ export default function EnhancedMatchInterface({
         setIsMyTurn(match.player1_id === currentUser.id)
         console.log('✅ Game state initialized from database')
         
-        // Check if countdown has started in database
-        if (match.game_data?.countdown_started && !countdown) {
-          console.log('🔢 Countdown already started in database, syncing...')
-          const countdownStartTime = new Date(match.game_data.countdown_start_time)
-          const now = new Date()
-          const elapsedSeconds = Math.floor((now.getTime() - countdownStartTime.getTime()) / 1000)
-          
-          if (elapsedSeconds < 3) {
-            // Countdown still in progress, sync with it
-            const remainingCountdown = 3 - elapsedSeconds
-            setCountdown(remainingCountdown)
-            setGameState(prev => ({ ...prev, status: 'countdown' }))
-            
-            // Start countdown from current position
-            const interval = setInterval(() => {
-              setCountdown(prev => {
-                if (prev === null || prev <= 1) {
-                  clearInterval(interval)
-                  setCountdownInterval(null)
-                  startActualMatch()
-                  return null
-                }
-                return prev - 1
-              })
-            }, 1000)
-            setCountdownInterval(interval)
-          }
-        }
+        // Countdown sync is handled by the Player 2 useEffect above
         
         // Auto-start countdown if both players are ready and match is waiting
         if (match.status === 'waiting' && isPlayer1) {
@@ -544,13 +521,7 @@ export default function EnhancedMatchInterface({
                     lastUpdate: Date.now()
                   }))
                   
-                  // Auto-start countdown when both players are ready
-                  if (isPlayer1 && gameState.status === 'waiting') {
-                    console.log('🚀 Both players ready! Auto-starting countdown...')
-                    setTimeout(() => {
-                      startCountdown()
-                    }, 1000) // Small delay to let UI update
-                  }
+                  // Auto-start countdown is handled by the initialization useEffect above
                 }
               })
           }
@@ -851,6 +822,8 @@ export default function EnhancedMatchInterface({
       if ((match.status === 'in_progress' || match.status === 'waiting' || localMatch.status === 'in_progress') && gameState.status === 'waiting') {
         console.log('🔧 Forcing game state to playing for match in progress/waiting')
         setGameState(prev => ({ ...prev, status: 'playing' }))
+      } else if (gameState.status === 'countdown') {
+        console.log('🔄 Skipping game state reset - countdown in progress')
       }
       
       // Render the correct game component based on game type
@@ -926,6 +899,8 @@ export default function EnhancedMatchInterface({
       if ((match.status === 'in_progress' || localMatch.status === 'in_progress') && gameState.status === 'waiting') {
         console.log('🔧 Forcing game state to playing for sync')
         setGameState(prev => ({ ...prev, status: 'playing' }))
+      } else if (gameState.status === 'countdown') {
+        console.log('🔄 Skipping game state reset - countdown in progress')
       }
       
       // Render the correct game component based on game type
