@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -27,6 +27,8 @@ interface MatchmakingInterfaceProps {
   matchType: 'free' | 'tokens' | 'cash5' | 'cash10'
   betAmount: number
   onMatchFound?: (matchId: string, matchType: string) => void
+  onCancel?: () => void
+  autoStart?: boolean
 }
 
 type MatchmakingStatus = 
@@ -42,7 +44,9 @@ export default function MatchmakingInterface({
   currentUserId,
   matchType,
   betAmount,
-  onMatchFound
+  onMatchFound,
+  onCancel,
+  autoStart = false
 }: MatchmakingInterfaceProps) {
   const [status, setStatus] = useState<MatchmakingStatus>('idle')
   const [timeRemaining, setTimeRemaining] = useState(180) // 3 minutes in seconds
@@ -50,6 +54,8 @@ export default function MatchmakingInterface({
   const [matchId, setMatchId] = useState<string | null>(null)
   const [gameResult, setGameResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasAutoStarted, setHasAutoStarted] = useState(false)
+  const isInitialized = useRef(false)
   const supabase = createClientComponentClient()
 
   // Real-time subscription to listen for new matches
@@ -130,15 +136,31 @@ export default function MatchmakingInterface({
     setTimeRemaining(0)
   }, [])
 
+  // Auto-start matchmaking if autoStart prop is true (only once)
+  useEffect(() => {
+    console.log("🔍 Auto-start effect triggered:", { autoStart, hasAutoStarted, isInitialized: isInitialized.current })
+    if (autoStart && !hasAutoStarted && !isInitialized.current) {
+      console.log("🚀 Auto-starting matchmaking")
+      setHasAutoStarted(true)
+      isInitialized.current = true
+      // Start immediately without delay
+      startMatchmaking()
+    }
+  }, [autoStart, hasAutoStarted])
+
   const startMatchmaking = async () => {
+    console.log("🎯 startMatchmaking called, setting status to searching")
     setStatus('searching')
     setTimeRemaining(180)
     setError(null)
 
     try {
+      console.log("🎯 Calling joinMatchmakingQueue...")
       const result = await joinMatchmakingQueue(gameId, betAmount, matchType)
+      console.log("🎯 joinMatchmakingQueue result:", result)
       
       if (result.error) {
+        console.log("❌ Error in joinMatchmakingQueue:", result.error)
         setError(result.error)
         setStatus('idle')
         return
@@ -167,16 +189,21 @@ export default function MatchmakingInterface({
   }
 
   const cancelMatchmaking = async () => {
+    console.log('🛑 Cancelling matchmaking...')
     if (queueId) {
       try {
-        await cancelMatchmakingQueue(queueId)
+        const result = await cancelMatchmakingQueue(queueId)
+        if (result.success) {
+          console.log('✅ Successfully cancelled matchmaking queue')
+        } else {
+          console.error('❌ Failed to cancel queue:', result.error)
+        }
       } catch (error) {
-        console.error('Cancel error:', error)
+        console.error('❌ Cancel error:', error)
       }
     }
-    setStatus('idle')
-    setQueueId(null)
-    setTimeRemaining(180)
+    // Call the onCancel callback to go back to the selection page
+    onCancel?.()
   }
 
   const startPriorityGame = () => {
@@ -393,8 +420,22 @@ export default function MatchmakingInterface({
           </div>
         )}
 
-        {/* Start Matchmaking */}
-        {status === 'idle' && (
+        {/* Auto-starting loading state - only show if not cancelled */}
+        {status === 'idle' && autoStart && hasAutoStarted && (
+          <div className="space-y-4">
+            <div className="text-center space-y-2">
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+              </div>
+              <p className="text-gray-300">
+                Starting matchmaking...
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Start Matchmaking - show if not auto-starting OR if user cancelled */}
+        {status === 'idle' && (!autoStart || !hasAutoStarted) && (
           <div className="space-y-4">
             <div className="text-center space-y-2">
               <p className="text-gray-300">

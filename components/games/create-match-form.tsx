@@ -282,10 +282,12 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
         }
 
         if (existingQueues && existingQueues.length > 0) {
-          console.log(`🔄 Found ${existingQueues.length} existing matchmaking queues, but showing bet selection first...`)
-          // Don't automatically resume matchmaking - let user choose
+          console.log(`🔄 Found ${existingQueues.length} existing matchmaking queues, automatically resuming...`)
+          // Automatically resume matchmaking for existing queues
           setHasExistingQueues(true)
-          console.log("✅ Found existing queues, but showing bet selection UI")
+          setUserStartedMatchmaking(true)
+          setShowMatchmaking(true)
+          console.log("✅ Found existing queues, automatically resuming matchmaking")
         } else {
           console.log("✅ No existing queues found")
           setHasExistingQueues(false)
@@ -455,6 +457,12 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
     router.push(`/games/match/${matchId}`)
   }
 
+  const handleCancelMatchmaking = () => {
+    console.log("🛑 User cancelled matchmaking, going back to selection")
+    setShowMatchmaking(false)
+    setUserStartedMatchmaking(false)
+  }
+
   const handleDebugActiveMatches = async () => {
     try {
       console.log("🔍 DEBUG: Checking for active matches...")
@@ -534,6 +542,7 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
     console.log("🎮 Showing matchmaking interface - user started it manually")
     return (
       <MatchmakingInterface
+        key={`matchmaking-${game.id}-${user.id}`}
         gameId={game.id}
         currentUserId={user.id}
         matchType={selectedTier}
@@ -543,6 +552,8 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           selectedTier === 'cash5' ? 500 : 1000
         }
         onMatchFound={handleMatchFound}
+        onCancel={handleCancelMatchmaking}
+        autoStart={true}
       />
     )
   }
@@ -598,11 +609,7 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
     )
   }
 
-  // If showMatchmaking is true but user didn't start it, reset it
-  if (showMatchmaking && !userStartedMatchmaking) {
-    console.log("🔄 Resetting showMatchmaking - user didn't start it manually")
-    setShowMatchmaking(false)
-  }
+  // Removed problematic reset logic that was causing cycling
 
   return (
     <Card className="bg-gray-900/50 border-gray-800">
@@ -620,29 +627,31 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           {/* Monetization Tiers */}
           <div className="space-y-4">
             <label className="text-sm font-medium text-gray-300">Match Type</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {monetizationTiers.map((tier) => (
                 <button
                   key={tier.id}
                   type="button"
                   onClick={() => setSelectedTier(tier.id)}
                   disabled={!tier.available}
-                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                  className={`p-3 rounded-lg border-2 transition-all duration-200 ${
                     selectedTier === tier.id
                       ? tier.color + ' border-opacity-100'
                       : 'bg-gray-800/30 border-gray-700 text-gray-400 hover:border-gray-600'
                   } ${!tier.available ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <div className="flex items-center space-x-2 mb-2">
-                    {tier.icon}
-                    <span className="font-semibold">{tier.name}</span>
-                  </div>
-                  <p className="text-sm opacity-80">{tier.description}</p>
-                  {tier.betAmount > 0 && (
-                    <div className="mt-2 text-lg font-bold">
-                      {tier.betAmount.toLocaleString()} tokens
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      {tier.icon}
+                      <span className="font-semibold">{tier.name}</span>
                     </div>
-                  )}
+                    {tier.betAmount > 0 && (
+                      <div className="text-lg font-bold">
+                        {tier.betAmount.toLocaleString()} tokens
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-sm opacity-80 mt-1">{tier.description}</p>
                   {!tier.available && (
                     <Badge variant="secondary" className="mt-2 text-xs">
                       Insufficient Balance

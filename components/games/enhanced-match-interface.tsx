@@ -449,8 +449,8 @@ export default function EnhancedMatchInterface({
         // Countdown sync is handled by the Player 2 useEffect above
         
         // Auto-start countdown if both players are ready and match is waiting
-        if (match.status === 'waiting' && isPlayer1) {
-          console.log('🚀 Both players already present! Auto-starting countdown...')
+        if (match.status === 'waiting' && match.game_data?.player1_ready && match.game_data?.player2_ready) {
+          console.log('🚀 Both players ready! Auto-starting countdown...')
           setTimeout(() => {
             startCountdown()
           }, 2000) // Small delay to let UI settle
@@ -485,6 +485,15 @@ export default function EnhancedMatchInterface({
         (payload) => {
           console.log('🔄 Match updated in real-time:', payload.new)
           const updatedMatch = payload.new as Match
+          
+          // Check if both players are now ready
+          if (updatedMatch.game_data?.player1_ready && updatedMatch.game_data?.player2_ready && 
+              updatedMatch.status === 'waiting' && gameState.status !== 'countdown') {
+            console.log('🚀 Both players ready! Starting countdown...')
+            setTimeout(() => {
+              startCountdown()
+            }, 1000) // Small delay to let UI update
+          }
           
           // Check if player2 joined
           if (updatedMatch.player2_id && !localMatch.player2_id) {

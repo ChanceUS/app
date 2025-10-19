@@ -87,7 +87,27 @@ export default function MatchPage({ params }: MatchPageProps) {
     // Poll for match updates every 2 seconds
     const pollInterval = setInterval(loadData, 2000)
     
-    return () => clearInterval(pollInterval)
+    // Set up real-time subscription for immediate updates
+    const channel = supabase
+      .channel(`match-${matchId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'matches', 
+          filter: `id=eq.${matchId}` 
+        }, 
+        (payload) => {
+          console.log('🔄 Match updated via real-time:', payload.new)
+          setMatch(payload.new)
+        }
+      )
+      .subscribe()
+    
+    return () => {
+      clearInterval(pollInterval)
+      supabase.removeChannel(channel)
+    }
   }, [matchId, router, supabase])
 
   if (loading) {
@@ -175,23 +195,70 @@ export default function MatchPage({ params }: MatchPageProps) {
           </CardHeader>
         </Card>
 
-        {/* Start Match Button - ABOVE the game */}
-        {isPlayer1 && match.status === "waiting" && (
+        {/* Start Match Button - Show for both players when match is waiting */}
+        {match.status === "waiting" && (
           <div className="text-center mt-6 mb-6">
             <button 
               onClick={async () => {
                 try {
-                  const { error } = await supabase
+                  // Get current game_data
+                  const { data: currentMatch } = await supabase
                     .from('matches')
-                    .update({ status: 'in_progress', started_at: new Date().toISOString() })
+                    .select('game_data')
                     .eq('id', match.id)
+                    .single()
                   
-                  if (error) {
-                    console.error('Error starting match:', error)
+                  const gameData = currentMatch?.game_data || {}
+                  const playerKey = isPlayer1 ? 'player1_ready' : 'player2_ready'
+                  const opponentKey = isPlayer1 ? 'player2_ready' : 'player1_ready'
+                  
+                  // Mark current player as ready
+                  const updatedGameData = {
+                    ...gameData,
+                    [playerKey]: true
+                  }
+                  
+                  // Check if both players are ready
+                  const bothReady = updatedGameData.player1_ready && updatedGameData.player2_ready
+                  
+                  if (bothReady) {
+                    // Both players ready - start the match with countdown
+                    const { error } = await supabase
+                      .from('matches')
+                      .update({ 
+                        status: 'in_progress', 
+                        started_at: new Date().toISOString(),
+                        game_data: updatedGameData
+                      })
+                      .eq('id', match.id)
+                    
+                    if (error) {
+                      console.error('Error starting match:', error)
+                    } else {
+                      console.log('Match started! Both players ready.')
+                      setMatch((prev: any) => ({ 
+                        ...prev, 
+                        status: 'in_progress', 
+                        started_at: new Date().toISOString(),
+                        game_data: updatedGameData
+                      }))
+                    }
                   } else {
-                    console.log('Match started!')
-                    // Update local state instead of reloading
-                    setMatch((prev: any) => ({ ...prev, status: 'in_progress', started_at: new Date().toISOString() }))
+                    // Only current player ready - update game_data
+                    const { error } = await supabase
+                      .from('matches')
+                      .update({ game_data: updatedGameData })
+                      .eq('id', match.id)
+                    
+                    if (error) {
+                      console.error('Error updating player readiness:', error)
+                    } else {
+                      console.log(`${isPlayer1 ? 'Player 1' : 'Player 2'} is ready. Waiting for opponent...`)
+                      setMatch((prev: any) => ({ 
+                        ...prev, 
+                        game_data: updatedGameData
+                      }))
+                    }
                   }
                 } catch (error) {
                   console.error('Error starting match:', error)
@@ -199,8 +266,25 @@ export default function MatchPage({ params }: MatchPageProps) {
               }}
               className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
             >
-              Start Match
+              {match.game_data?.player1_ready && match.game_data?.player2_ready 
+                ? 'Both Players Ready!' 
+                : 'I\'m Ready!'}
             </button>
+            
+            {/* Show readiness status */}
+            <div className="mt-2 text-sm text-gray-400">
+              {match.game_data?.player1_ready && match.game_data?.player2_ready ? (
+                <span className="text-green-400">Both players ready! Match starting...</span>
+              ) : (
+                <span>
+                  {match.game_data?.player1_ready && isPlayer1 ? 'You\'re ready! ' : ''}
+                  {match.game_data?.player2_ready && isPlayer2 ? 'You\'re ready! ' : ''}
+                  {match.game_data?.player1_ready && match.game_data?.player2_ready 
+                    ? 'Waiting for match to start...' 
+                    : 'Waiting for both players to be ready...'}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
