@@ -105,49 +105,13 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             
             // Update board if different
             if (gameData.board && JSON.stringify(gameData.board) !== JSON.stringify(board)) {
+              console.log('🔄 Updating board from database:', gameData.board)
               setBoard(gameData.board)
               
-              // Reconstruct move history from current board state (only once)
+              // Initialize move history as empty - let new moves be added properly
               if (gameData.board && moveHistory.length === 0 && !historyReconstructed) {
-                console.log('🔄 Starting history reconstruction...')
-                const reconstructedHistory: Array<{board: (string | null)[], move: number, player: string, moveNumber: number}> = []
-                const currentBoard = gameData.board
-                
-                // Count pieces to determine how many moves have been made
-                const pieceCount = currentBoard.filter((piece: any) => piece !== null).length
-                console.log('🔍 Found', pieceCount, 'pieces on board')
-                
-                if (pieceCount > 0) {
-                  // Reconstruct moves by analyzing the board from bottom to top
-                  let tempBoard = Array(42).fill(null)
-                  
-                  for (let moveNum = 1; moveNum <= pieceCount; moveNum++) {
-                    const player = moveNum % 2 === 1 ? 'player1' : 'player2'
-                    let moveFound = false
-                    
-                    // Find the next piece to place by comparing with current board
-                    for (let col = 0; col < 7 && !moveFound; col++) {
-                      for (let row = 5; row >= 0; row--) {
-                        const index = row * 7 + col
-                        if (currentBoard[index] === player && tempBoard[index] === null) {
-                          tempBoard[index] = player
-                          reconstructedHistory.push({
-                            board: [...tempBoard],
-                            move: col,
-                            player: player,
-                            moveNumber: moveNum
-                          })
-                          moveFound = true
-                          console.log(`📝 Reconstructed move ${moveNum}: ${player} in column ${col + 1}`)
-                          break
-                        }
-                      }
-                    }
-                  }
-                }
-                
-                console.log('📚 Reconstructed history with', reconstructedHistory.length, 'moves')
-                setMoveHistory(reconstructedHistory)
+                console.log('🔄 Initializing empty move history')
+                setMoveHistory([])
                 setHistoryReconstructed(true)
               }
             }
@@ -585,7 +549,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       }`}
                     >
                       {Array.from({ length: 6 }, (_, row) => {
-                        const i = col + (row * 7)
+                        const i = row * 7 + col  // Fixed: should be row * 7 + col, not col + (row * 7)
                         // Use historical board if viewing history, otherwise use current board
                         const displayBoard = viewingHistory && currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length 
                           ? moveHistory[currentHistoryIndex].board 
