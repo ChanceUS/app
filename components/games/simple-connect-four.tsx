@@ -24,10 +24,38 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [moveHistory, setMoveHistory] = useState<Array<{board: (string | null)[], move: number, player: string, moveNumber: number}>>([])
   const [viewingHistory, setViewingHistory] = useState(false)
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1)
+  const [historyReconstructed, setHistoryReconstructed] = useState(false)
+  
+  // Move timer state
+  const [moveTimeLeft, setMoveTimeLeft] = useState(10)
+  const [isMoveTimerActive, setIsMoveTimerActive] = useState(false)
   
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
   const myPlayer = currentUserId === player1Id ? 'player1' : currentUserId === player2Id ? 'player2' : null
+
+  // Move timer effect
+  useEffect(() => {
+    if (isMoveTimerActive && moveTimeLeft > 0) {
+      const timer = setTimeout(() => {
+        setMoveTimeLeft(prev => prev - 1)
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else if (isMoveTimerActive && moveTimeLeft === 0) {
+      // Timer expired - make a random move for the current player
+      handleTimerExpiry()
+    }
+  }, [isMoveTimerActive, moveTimeLeft])
+
+  // Start timer when it's a player's turn
+  useEffect(() => {
+    if (currentStatus === 'in_progress' && !winner && !viewingHistory) {
+      setMoveTimeLeft(10)
+      setIsMoveTimerActive(true)
+    } else {
+      setIsMoveTimerActive(false)
+    }
+  }, [currentPlayer, currentStatus, winner, viewingHistory])
   
 
   // Load game state from database and check for updates
@@ -79,39 +107,48 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             if (gameData.board && JSON.stringify(gameData.board) !== JSON.stringify(board)) {
               setBoard(gameData.board)
               
-              // Reconstruct move history from current board state
-              if (gameData.board && moveHistory.length === 0) {
+              // Reconstruct move history from current board state (only once)
+              if (gameData.board && moveHistory.length === 0 && !historyReconstructed) {
+                console.log('🔄 Starting history reconstruction...')
                 const reconstructedHistory: Array<{board: (string | null)[], move: number, player: string, moveNumber: number}> = []
                 const currentBoard = gameData.board
                 
                 // Count pieces to determine how many moves have been made
                 const pieceCount = currentBoard.filter((piece: any) => piece !== null).length
+                console.log('🔍 Found', pieceCount, 'pieces on board')
                 
-                // Reconstruct moves by analyzing the board
-                let tempBoard = Array(42).fill(null)
-                for (let moveNum = 1; moveNum <= pieceCount; moveNum++) {
-                  const player = moveNum % 2 === 1 ? 'player1' : 'player2'
+                if (pieceCount > 0) {
+                  // Reconstruct moves by analyzing the board from bottom to top
+                  let tempBoard = Array(42).fill(null)
                   
-                  // Find the next piece to place by comparing with current board
-                  for (let col = 0; col < 7; col++) {
-                    for (let row = 5; row >= 0; row--) {
-                      const index = row * 7 + col
-                      if (currentBoard[index] === player && tempBoard[index] === null) {
-                        tempBoard[index] = player
-                        reconstructedHistory.push({
-                          board: [...tempBoard],
-                          move: col,
-                          player: player,
-                          moveNumber: moveNum
-                        })
-                        break
+                  for (let moveNum = 1; moveNum <= pieceCount; moveNum++) {
+                    const player = moveNum % 2 === 1 ? 'player1' : 'player2'
+                    let moveFound = false
+                    
+                    // Find the next piece to place by comparing with current board
+                    for (let col = 0; col < 7 && !moveFound; col++) {
+                      for (let row = 5; row >= 0; row--) {
+                        const index = row * 7 + col
+                        if (currentBoard[index] === player && tempBoard[index] === null) {
+                          tempBoard[index] = player
+                          reconstructedHistory.push({
+                            board: [...tempBoard],
+                            move: col,
+                            player: player,
+                            moveNumber: moveNum
+                          })
+                          moveFound = true
+                          console.log(`📝 Reconstructed move ${moveNum}: ${player} in column ${col + 1}`)
+                          break
+                        }
                       }
                     }
-                    if (reconstructedHistory.length === moveNum) break
                   }
                 }
                 
+                console.log('📚 Reconstructed history with', reconstructedHistory.length, 'moves')
                 setMoveHistory(reconstructedHistory)
+                setHistoryReconstructed(true)
               }
             }
             
@@ -160,9 +197,47 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     return () => clearInterval(interval)
   }, [matchId, currentStatus, board, currentPlayer, winner])
 
+  // Handle timer expiry - make a random move
+  const handleTimerExpiry = async () => {
+    if (winner || currentStatus !== 'in_progress') return
+    
+    console.log('⏰ Timer expired! Making random move for', currentPlayer)
+    
+    // Find available columns (columns that aren't full)
+    const availableColumns = []
+    for (let col = 0; col < 7; col++) {
+      // Check if column has space (top row of column is empty)
+      if (board[col] === null) {
+        availableColumns.push(col)
+      }
+    }
+    
+    if (availableColumns.length > 0) {
+      // Make a random move
+      const randomColumn = availableColumns[Math.floor(Math.random() * availableColumns.length)]
+      console.log('🎲 Making random move in column', randomColumn + 1)
+      await dropPiece(randomColumn)
+    } else {
+      // No available moves - game is a draw
+      console.log('No available moves - game is a draw')
+    }
+    
+    setIsMoveTimerActive(false)
+  }
+
+  // Clear move history (useful for debugging)
+  const clearMoveHistory = () => {
+    console.log('🧹 Clearing move history')
+    setMoveHistory([])
+    setHistoryReconstructed(false)
+  }
+
   // Game logic functions
   const dropPiece = async (column: number) => {
     if (winner || currentStatus !== 'in_progress' || !isMyTurn) return
+    
+    // Reset timer when a move is made
+    setIsMoveTimerActive(false)
     
     // Find the lowest available row in the column
     for (let row = 5; row >= 0; row--) {
@@ -173,14 +248,31 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         newBoard[index] = currentPlayer
         setBoard(newBoard)
         
-        // Add move to history
-        const moveNumber = moveHistory.length + 1
-        setMoveHistory(prev => [...prev, {
+        // Add move to history with proper move number
+        const newMoveNumber = moveHistory.length + 1
+        const newMove = {
           board: [...newBoard],
           move: column,
           player: currentPlayer,
-          moveNumber: moveNumber
-        }])
+          moveNumber: newMoveNumber
+        }
+        
+        // Only add if this exact move isn't already in history
+        setMoveHistory(prev => {
+          const isDuplicate = prev.some(move => 
+            move.move === column && 
+            move.player === currentPlayer && 
+            move.moveNumber === newMoveNumber
+          )
+          
+          if (isDuplicate) {
+            console.log('🚫 Duplicate move detected, not adding to history')
+            return prev
+          }
+          
+          console.log('📝 Adding move to history:', newMove)
+          return [...prev, newMove]
+        })
         
         // Save to database for opponent sync
         const nextPlayer = currentPlayer === 'player1' ? 'player2' : 'player1'
@@ -450,6 +542,18 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                             </span>
                           </p>
                         )}
+                        
+                        {/* Move Timer - Compact version */}
+                        {isMoveTimerActive && currentStatus === 'in_progress' && !winner && !viewingHistory && (
+                          <div className="mt-2 flex items-center justify-center gap-2">
+                            <span className="text-sm text-gray-300">
+                              {isMyTurn ? 'Your turn' : 'Opponent\'s turn'}:
+                            </span>
+                            <div className={`text-lg font-bold px-2 py-1 rounded ${moveTimeLeft <= 3 ? 'text-red-500 bg-red-500/20 animate-pulse' : moveTimeLeft <= 5 ? 'text-yellow-500 bg-yellow-500/20' : 'text-green-500 bg-green-500/20'}`}>
+                              {moveTimeLeft}s
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -543,6 +647,13 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         Back to Current
                       </button>
                     )}
+                    <button
+                      onClick={clearMoveHistory}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+                      title="Clear move history (debug)"
+                    >
+                      Clear
+                    </button>
                   </div>
                 </div>
                   
