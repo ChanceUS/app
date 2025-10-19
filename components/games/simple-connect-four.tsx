@@ -225,12 +225,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     setIsMoveTimerActive(false)
   }
 
-  // Clear move history (useful for debugging)
-  const clearMoveHistory = () => {
-    console.log('🧹 Clearing move history')
-    setMoveHistory([])
-    setHistoryReconstructed(false)
-  }
 
   // Game logic functions
   const dropPiece = async (column: number) => {
@@ -544,7 +538,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         )}
                         
                         {/* Move Timer - Compact version */}
-                        {isMoveTimerActive && currentStatus === 'in_progress' && !winner && !viewingHistory && (
+                        {isMoveTimerActive && currentStatus === 'in_progress' && !winner && (
                           <div className="mt-2 flex items-center justify-center gap-2">
                             <span className="text-sm text-gray-300">
                               {isMyTurn ? 'Your turn' : 'Opponent\'s turn'}:
@@ -647,13 +641,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         Back to Current
                       </button>
                     )}
-                    <button
-                      onClick={clearMoveHistory}
-                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
-                      title="Clear move history (debug)"
-                    >
-                      Clear
-                    </button>
                   </div>
                 </div>
                   
