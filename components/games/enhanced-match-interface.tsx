@@ -1179,15 +1179,6 @@ export default function EnhancedMatchInterface({
           </Alert>
         )}
 
-        {/* Debug Status - Hidden for normal use */}
-        {false && (
-          <Alert className="bg-gray-500/20 border-gray-500/30 text-gray-400">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Debug: match.status={match.status}, localMatch.status={localMatch.status}, gameState.status={gameState.status}, hasPlayer2={!!match.player2_id}
-            </AlertDescription>
-          </Alert>
-        )}
 
         {/* Force Game Render - Hidden for normal use */}
         {false && match.player2_id && (
@@ -1350,10 +1341,6 @@ export default function EnhancedMatchInterface({
           </div>
         )}
 
-        {/* Debug Info */}
-        <div className="text-xs text-gray-500 bg-gray-800/30 p-2 rounded">
-          Debug: localMatch.status={localMatch.status}, gameState.status={gameState.status}, isPlayer1={isPlayer1}, hasPlayer2={!!localMatch.player2_id}
-        </div>
 
         {/* Countdown Display - Show regardless of match status */}
         {gameState.status === 'countdown' && countdown !== null && localMatch.status !== 'waiting' && (
