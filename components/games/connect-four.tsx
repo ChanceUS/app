@@ -163,8 +163,7 @@ export default function ConnectFour({
       <CardContent>
         <div className="space-y-3 sm:space-y-2">
           {/* Column buttons */}
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            <div className="col-span-7 text-center text-xs text-red-400 mb-2">DEBUG: Mobile Layout Active</div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-4">
             {useMemo(() => Array.from({ length: 7 }, (_, col) => {
               const isDisabled = !isActive || !isMyTurn || gameWinner !== null
               return (
@@ -172,7 +171,7 @@ export default function ConnectFour({
                   key={col}
                   onClick={() => handleColumnClick(col)}
                   disabled={isDisabled}
-                  className="h-6 bg-gray-800 hover:bg-gray-700 text-white text-xs disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
+                  className="h-10 sm:h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
                 >
                   ↓
                 </Button>
@@ -182,18 +181,15 @@ export default function ConnectFour({
 
           {/* Game board */}
           <div className="bg-blue-900/30 p-3 sm:p-4 rounded-lg">
-            <div className="text-center text-xs text-red-400 mb-2">DEBUG: Game Board - Smaller Chips</div>
-            <div className="flex flex-col gap-2 mx-auto max-w-fit">
-              {board.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex gap-2 sm:gap-1">
-                  {row.map((cell, colIndex) => (
-                    <div
-                      key={`${rowIndex}-${colIndex}`}
-                      className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-6 h-6`}
-                    />
-                  ))}
-                </div>
-              ))}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1 mx-auto max-w-fit">
+              {board.map((row, rowIndex) =>
+                row.map((cell, colIndex) => (
+                  <div
+                    key={`${rowIndex}-${colIndex}`}
+                    className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-10 h-10 sm:w-12 sm:h-12`}
+                  />
+                )),
+              )}
             </div>
           </div>
 

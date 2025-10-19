@@ -98,7 +98,7 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
       let errorMessage = "Login failed. Please try again."
       
       if (error === 'rate_limit') {
-        errorMessage = "Rate limit exceeded. Please wait 15-30 minutes before trying again. This is a temporary restriction to prevent abuse."
+        errorMessage = "Rate limit exceeded. Please wait 15 minutes before trying again. Close all browser tabs and clear browser data."
       } else if (error === 'invalid_code') {
         errorMessage = "Login session expired. Please try logging in again."
       } else if (error === 'auth_error') {

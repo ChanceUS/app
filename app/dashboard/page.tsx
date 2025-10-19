@@ -6,6 +6,9 @@ import QuickActions from "@/components/dashboard/quick-actions"
 import RecentMatches from "@/components/dashboard/recent-matches"
 import OnlineUsersCount from "@/components/dashboard/online-users-count"
 import DashboardClient from "@/components/dashboard/dashboard-client"
+import FriendsOnline from "@/components/dashboard/friends-online"
+import WinningList from "@/components/dashboard/winning-list"
+import { handleAuthError } from "@/lib/auth-fix"
 import { Wallet, Trophy, Users, TrendingUp } from "lucide-react"
 import Image from "next/image"
 
@@ -49,13 +52,18 @@ export default async function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="mb-8 fade-in">
-          <div className="flex items-center space-x-4 mb-4">
-            <Image src="/chanceus-eagle.png" alt="ChanceUS" width={60} height={60} className="h-12 w-12" />
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                Welcome back, <span className="text-accent">{user.display_name || user.username}</span>!
-              </h1>
-              <p className="text-gray-400">Ready to challenge your friends in skill-based games?</p>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <Image src="/chanceus-eagle.png" alt="ChanceUS" width={60} height={60} className="h-12 w-12" />
+              <div>
+                <h1 className="text-3xl font-bold text-white">
+                  Welcome back, <span className="text-accent">{user.display_name || user.username}</span>!
+                </h1>
+                <p className="text-gray-400">Ready to challenge your friends in skill-based games?</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <FriendsOnline />
             </div>
           </div>
         </div>
@@ -101,28 +109,13 @@ export default async function DashboardPage() {
 
           <div className="card-modern p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white">Active Players</h3>
-              <div className="flex items-center text-orange-500">
-                <div className="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse"></div>
-                <span className="text-sm">1,247 online</span>
+              <h3 className="text-lg font-bold text-white">Recent Winners</h3>
+              <div className="flex items-center text-green-500">
+                <Trophy className="w-4 h-4 mr-2" />
+                <span className="text-sm">Live Payouts</span>
               </div>
             </div>
-            <div className="space-y-3">
-              {["MathWizard", "ConnectPro", "TriviaKing", "QuickShot", "BrainBox"].map((player) => (
-                <div key={player} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-black font-bold text-sm">
-                      {player.charAt(0)}
-                    </div>
-                    <span className="text-white">{player}</span>
-                  </div>
-                  <div className="flex items-center text-orange-500">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                    <span className="text-xs">Playing</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <WinningList />
           </div>
         </div>
       </main>

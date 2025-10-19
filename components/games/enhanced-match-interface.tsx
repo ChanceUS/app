@@ -9,7 +9,7 @@ import { useMatchRealtime } from '@/hooks/use-match-realtime'
 import { supabase } from '@/lib/supabase/client'
 import { completeMatch } from '@/lib/complete-match-action'
 import type { Match, User, Game } from '@/lib/supabase/client'
-import FourInARow from './connect-four'
+import SimpleConnectFour from './simple-connect-four'
 import MathBlitz from './math-blitz'
 import MultiplayerMathBlitz from './multiplayer-math-blitz'
 import TriviaChallenge from './trivia-challenge'
@@ -869,18 +869,21 @@ export default function EnhancedMatchInterface({
           />
         case '4 in a row':
         case 'connect 4':
-          console.log('🎮 Rendering Connect 4 with props:', {
-            isActive: true,
-            currentPlayer: currentUser.id === match.player1_id ? "player1" : "player2",
-            isMyTurn: isMyTurn,
-            gameState: gameState.status,
-            matchStatus: match.status
+          console.log('🎮 Rendering Simple Connect 4 with props:', {
+            matchId: match.id,
+            betAmount: match.bet_amount || 0,
+            status: match.status,
+            currentUserId: currentUser.id,
+            player1Id: match.player1_id,
+            player2Id: match.player2_id
           })
-          return <FourInARow
-            onGameEnd={handleGameComplete}
-            isActive={true}
-            currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={isMyTurn}
+          return <SimpleConnectFour
+            matchId={match.id}
+            betAmount={match.bet_amount || 0}
+            status={match.status}
+            currentUserId={currentUser.id}
+            player1Id={match.player1_id}
+            player2Id={match.player2_id}
           />
         case 'trivia challenge':
           console.log('🎮 Rendering Trivia Challenge with props:', {
@@ -940,11 +943,13 @@ export default function EnhancedMatchInterface({
           />
         case '4 in a row':
         case 'connect 4':
-          return <FourInARow
-            onGameEnd={handleGameComplete}
-            isActive={true}
-            currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={isMyTurn}
+          return <SimpleConnectFour
+            matchId={match.id}
+            betAmount={match.bet_amount || 0}
+            status={match.status}
+            currentUserId={currentUser.id}
+            player1Id={match.player1_id}
+            player2Id={match.player2_id}
           />
         case 'trivia challenge':
           console.log('🎮 Fallback: Rendering Trivia Challenge with props:', {
@@ -1004,11 +1009,13 @@ export default function EnhancedMatchInterface({
           />
         case '4 in a row':
         case 'connect 4':
-          return <FourInARow
-            onGameEnd={(result) => console.log('Single player 4 in a row completed:', result)}
-            isActive={true}
-            currentPlayer="player1"
-            isMyTurn={true}
+          return <SimpleConnectFour
+            matchId="solo-play"
+            betAmount={0}
+            status="in_progress"
+            currentUserId="solo-user"
+            player1Id="solo-user"
+            player2Id="solo-opponent"
           />
         default:
           console.log('🎮 Unknown game type, falling back to Math Blitz')
@@ -1163,7 +1170,7 @@ export default function EnhancedMatchInterface({
 
       <CardContent className="space-y-6">
         {/* Connection Status - Hidden since polling is working fine */}
-        {false && error && error.includes('polling fallback') && (
+        {false && error && error?.includes('polling fallback') && (
           <Alert className="bg-blue-500/20 border-blue-500/30 text-blue-400">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>

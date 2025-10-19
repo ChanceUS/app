@@ -22,8 +22,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
-  
-  // Determine which player the current user is
   const myPlayer = currentUserId === player1Id ? 'player1' : currentUserId === player2Id ? 'player2' : null
   
 
@@ -43,15 +41,10 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           if (!playersError && players) {
             const player1Data = players.find(p => p.id === player1Id)
             const player2Data = players.find(p => p.id === player2Id)
-            console.log('🔍 Player data loaded:', { player1Data, player2Data, player1Id, player2Id })
-            const newPlayerNames = {
+            setPlayerNames({
               player1: player1Data?.display_name || player1Data?.username || 'Player 1',
               player2: player2Data?.display_name || player2Data?.username || 'Player 2'
-            }
-            console.log('🔍 Setting player names:', newPlayerNames)
-            setPlayerNames(newPlayerNames)
-          } else {
-            console.error('❌ Error loading players:', playersError)
+            })
           }
         }
         
@@ -89,7 +82,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             
             // Update winner if different
             if (gameData.winner !== undefined && gameData.winner !== winner) {
-              console.log('🔍 Setting winner from game data:', gameData.winner)
               setWinner(gameData.winner)
             }
           }
@@ -308,27 +300,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                 </div>
               ) : currentStatus === 'completed' ? (
                 <div className="text-blue-400 mb-6">
-                  {winner ? (
-                    <div>
-                      <p className="text-xl font-bold">
-                        {winner === 'draw' ? (
-                          <span className="text-gray-400">It's a Draw!</span>
-                        ) : winner === 'player1' ? (
-                          <span className="text-red-400">{playerNames.player1} Wins! 🎉</span>
-                        ) : winner === 'player2' ? (
-                          <span className="text-yellow-400">{playerNames.player2} Wins! 🎉</span>
-                        ) : (
-                          <span className="text-green-400">{playerNames.player1} Wins! 🎉</span>
-                        )}
-                      </p>
-                      <p>This match has finished.</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-xl font-bold">Match Completed</p>
-                      <p>This match has finished.</p>
-                    </div>
-                  )}
+                  <p className="text-xl font-bold">Match Completed</p>
+                  <p>This match has finished.</p>
                 </div>
               ) : currentStatus === 'in_progress' ? (
                 <>
@@ -373,19 +346,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       </div>
                     ) : currentStatus === 'completed' ? (
                       <div className="text-2xl font-bold">
-                        {winner ? (
-                          winner === 'draw' ? (
-                            <span className="text-gray-400">It's a Draw!</span>
-                          ) : winner === 'player1' ? (
-                            <span className="text-red-400">{playerNames.player1} Wins! 🎉</span>
-                          ) : winner === 'player2' ? (
-                            <span className="text-yellow-400">{playerNames.player2} Wins! 🎉</span>
-                          ) : (
-                            <span className="text-green-400">{playerNames.player1} Wins! 🎉</span>
-                          )
-                        ) : (
-                          <span className="text-green-400">Match Completed!</span>
-                        )}
+                        <span className="text-green-400">Match Completed!</span>
                       </div>
                     ) : (
                       <div>
