@@ -39,6 +39,8 @@ export function useUserActivity() {
           .eq('id', user.id)
       } catch (error) {
         console.error('Error updating user activity:', error)
+        // If online tracking columns don't exist, this is expected
+        // The error will be logged but won't break the app
       }
     }
 
@@ -70,7 +72,10 @@ export function useUserActivity() {
         .then(() => {
           console.log('User marked as offline')
         })
-        .catch(console.error)
+        .catch((error) => {
+          console.error('Error marking user as offline:', error)
+          // If online tracking columns don't exist, this is expected
+        })
     }
   }, [user])
 }

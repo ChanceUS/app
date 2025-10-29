@@ -437,13 +437,185 @@ export function checkWinner(board: FourInARowBoard): "player1" | "player2" | "dr
 
 // Trivia game logic
 export interface TriviaQuestion {
+  id?: string
   question: string
   options: string[]
   correctAnswer: number
   category: string
+  difficulty?: 'easy' | 'medium' | 'hard'
+  timeLimit?: number
 }
 
+// Multiplayer Trivia interfaces
+export interface TriviaAnswer {
+  questionId: string
+  answer: number
+  isCorrect: boolean
+  timeSpent: number
+  timestamp: number
+}
+
+export interface MultiplayerTriviaState {
+  questions: TriviaQuestion[]
+  currentQuestionIndex: number
+  player1Score: number
+  player2Score: number
+  player1Answers: TriviaAnswer[]
+  player2Answers: TriviaAnswer[]
+  player1Finished: boolean
+  player2Finished: boolean
+  gameStartTime: number
+  gameEndTime?: number
+  winner?: 'player1' | 'player2' | 'draw'
+}
+
+export interface TriviaResult {
+  player1Result: {
+    score: number
+    questionsAnswered: number
+    correctAnswers: number
+    accuracy: number
+    totalTime: number
+    averageTime: number
+  }
+  player2Result: {
+    score: number
+    questionsAnswered: number
+    correctAnswers: number
+    accuracy: number
+    totalTime: number
+    averageTime: number
+  }
+  winner: 'player1' | 'player2' | 'draw'
+}
+
+// Enhanced trivia questions with pop culture and animal questions
 export const triviaQuestions: TriviaQuestion[] = [
+  // Pop Culture Questions (Easy)
+  {
+    question: "What pop star embarked on the record-breaking Eras Tour starting in 2023?",
+    options: ["Taylor Swift", "Ariana Grande", "Billie Eilish", "Olivia Rodrigo"],
+    correctAnswer: 0,
+    category: "Pop Culture",
+  },
+  {
+    question: "Which social media platform is primarily known for its short-form video content and viral dance challenges?",
+    options: ["Instagram", "TikTok", "Snapchat", "Twitter"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "What Marvel superhero wields the hammer Mjölnir?",
+    options: ["Iron Man", "Thor", "Captain America", "Hulk"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "The song \"Hotline Bling\" is a major hit for which Canadian rapper?",
+    options: ["Drake", "The Weeknd", "Justin Bieber", "Shawn Mendes"],
+    correctAnswer: 0,
+    category: "Pop Culture",
+  },
+  {
+    question: "What actress starred as Barbie in the 2023 movie Barbie?",
+    options: ["Emma Stone", "Margot Robbie", "Scarlett Johansson", "Jennifer Lawrence"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "Who is often referred to as the \"King of Pop\"?",
+    options: ["Elvis Presley", "Michael Jackson", "Prince", "Stevie Wonder"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "What name did Taylor Swift give to her re-recorded albums (e.g., Fearless (Taylor's Version))?",
+    options: ["Taylor's Version (TV)", "Re-recorded", "Taylor's Edition", "Swift Version"],
+    correctAnswer: 0,
+    category: "Pop Culture",
+  },
+  {
+    question: "Which iconic '90s boy band sang the hit \"I Want It That Way\"?",
+    options: ["NSYNC", "Backstreet Boys", "New Kids on the Block", "Boyz II Men"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "\"You Only Live Once,\" often abbreviated to YOLO, was popularized by which Drake song?",
+    options: ["Started From the Bottom", "The Motto", "God's Plan", "Hotline Bling"],
+    correctAnswer: 1,
+    category: "Pop Culture",
+  },
+  {
+    question: "In the US version of The Office, what paper company does the show focus on?",
+    options: ["Dunder Mifflin", "Staples", "Office Depot", "Paper Company"],
+    correctAnswer: 0,
+    category: "Pop Culture",
+  },
+  
+  // Animal Questions (Easy)
+  {
+    question: "What is the tallest animal in the world?",
+    options: ["Giraffe", "Elephant", "Ostrich", "Camel"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "How many legs does an octopus have?",
+    options: ["Eight", "Six", "Ten", "Twelve"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What bird can fly backward?",
+    options: ["Hummingbird", "Eagle", "Owl", "Parrot"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What do you call a baby kangaroo?",
+    options: ["A joey", "A cub", "A pup", "A kit"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "Which large mammal cannot jump?",
+    options: ["Elephant", "Hippo", "Rhino", "Giraffe"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What is a group of lions called?",
+    options: ["A pride", "A pack", "A herd", "A flock"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What is the largest mammal on Earth?",
+    options: ["Blue whale", "African elephant", "Giraffe", "Polar bear"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "Which animal is often called \"man's best friend\"?",
+    options: ["Dog", "Cat", "Horse", "Bird"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What fish is Nemo from Finding Nemo?",
+    options: ["Clownfish", "Goldfish", "Angelfish", "Tropical fish"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  {
+    question: "What color is a polar bear's skin (under its fur)?",
+    options: ["Black", "White", "Pink", "Brown"],
+    correctAnswer: 0,
+    category: "Animals",
+  },
+  
+  // Classic Questions (for backward compatibility)
   {
     question: "What is the capital of France?",
     options: ["London", "Berlin", "Paris", "Madrid"],
@@ -494,6 +666,102 @@ export const triviaQuestions: TriviaQuestion[] = [
   },
 ]
 
+// Database-powered trivia question functions
+export async function getRandomTriviaQuestionFromDB(difficulty?: 'easy' | 'medium' | 'hard', category?: string): Promise<TriviaQuestion | null> {
+  try {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+
+    let query = supabase
+      .from('trivia_questions')
+      .select('*')
+      .order('random()')
+      .limit(1)
+
+    if (difficulty) {
+      query = query.eq('difficulty', difficulty)
+    }
+
+    if (category) {
+      query = query.eq('category', category)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching trivia question:', error)
+      // Fallback to local questions
+      return getRandomTriviaQuestion()
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('No trivia questions found, falling back to legacy questions')
+      return getRandomTriviaQuestion()
+    }
+
+    const question = data[0]
+    return {
+      question: question.question,
+      options: question.options,
+      correctAnswer: question.correct_answer,
+      category: question.category
+    }
+  } catch (error) {
+    console.error('Error in getRandomTriviaQuestionFromDB:', error)
+    return getRandomTriviaQuestion()
+  }
+}
+
+export async function getRandomMultiplicationQuestionFromDB(difficulty?: 'easy' | 'medium' | 'hard'): Promise<MathProblem | null> {
+  try {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+
+    let query = supabase
+      .from('multiplication_questions')
+      .select('*')
+      .order('random()')
+      .limit(1)
+
+    if (difficulty) {
+      query = query.eq('difficulty', difficulty)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching multiplication question:', error)
+      return null
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('No multiplication questions found, falling back to generated question')
+      return generateMultiplicationProblem(difficulty || 'easy')
+    }
+
+    const question = data[0]
+    const answer = question.product
+    const questionText = `${question.factor1} × ${question.factor2} = ?`
+    
+    // Generate options with the correct answer
+    const options = generateOptions(answer, 4, 15)
+    
+    return {
+      id: question.id,
+      question: questionText,
+      answer: answer,
+      options: options,
+      difficulty: question.difficulty as 'easy' | 'medium' | 'hard',
+      timeLimit: question.time_limit,
+      points: question.points
+    }
+  } catch (error) {
+    console.error('Error in getRandomMultiplicationQuestionFromDB:', error)
+    return generateMultiplicationProblem(difficulty || 'easy')
+  }
+}
+
+// Legacy function for backward compatibility
 export function getRandomTriviaQuestion(): TriviaQuestion {
   return triviaQuestions[Math.floor(Math.random() * triviaQuestions.length)]
 }
@@ -522,6 +790,13 @@ export function submitPlayerAnswer(
   timeSpent: number
 ): MultiplayerGameState {
   const currentProblem = gameState.problems[gameState.currentProblemIndex]
+  
+  // Safety check - if currentProblem is undefined, return the game state unchanged
+  if (!currentProblem) {
+    console.error('⚠️ Current problem is undefined at index:', gameState.currentProblemIndex, 'Total problems:', gameState.problems.length)
+    return gameState
+  }
+  
   const isCorrect = answer === currentProblem.answer
   
   // Check if player has already answered this problem
@@ -555,11 +830,21 @@ export function submitPlayerAnswer(
     }
   }
   
-  // Advance to next question immediately after any player answers
-  // No need to wait for both players
-  console.log('🚀 Advancing to next question immediately!')
-  newState.currentProblemIndex++
-  console.log('➡️ New problem index:', newState.currentProblemIndex)
+  // For independent play, we need to track each player's progress separately
+  // Update the currentProblemIndex to reflect the player's progress
+  const currentPlayerAnswers = playerId === 'player1' ? newState.player1Answers : newState.player2Answers
+  const answeredCount = currentPlayerAnswers.length
+  
+  // Set currentProblemIndex to the next unanswered problem index
+  // This helps the UI know which problem to show next
+  newState.currentProblemIndex = answeredCount
+  
+  console.log('🔄 Independent play mode - updated currentProblemIndex:', {
+    playerId,
+    answeredCount,
+    newCurrentIndex: newState.currentProblemIndex,
+    totalProblems: newState.problems.length
+  })
   
   // Check if this specific player is finished
   console.log(`🔍 Player ${playerId} completion check:`, {
@@ -713,7 +998,7 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
   })
   
   // Calculate composite scores that balance multiple factors
-  const calculateCompositeScore = (result: PlayerResult, playerName: string) => {
+  const calculateCompositeScore = (result: { score: number; problemsSolved: number; accuracy: number; totalTime: number; streak: number }, playerName: string) => {
     // Base score (0-1000 points)
     const baseScore = result.score
     

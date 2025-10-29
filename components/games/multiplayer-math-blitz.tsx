@@ -37,191 +37,645 @@ export default function MultiplayerMathBlitz({
   const [currentProblem, setCurrentProblem] = useState<MathProblem | null>(null)
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
   const [gameResult, setGameResult] = useState<MultiplayerResult | null>(null)
-  const [isMyTurn, setIsMyTurn] = useState(false)
+  // Remove turn-based logic - both players should be able to answer independently
+  // const [isMyTurn, setIsMyTurn] = useState(false)
   const [opponentProgress, setOpponentProgress] = useState(0)
   const [showInstructions, setShowInstructions] = useState(false) // Auto-start since countdown already happened
   const [hasAnsweredCurrentProblem, setHasAnsweredCurrentProblem] = useState(false)
   const [localAnswerSubmitted, setLocalAnswerSubmitted] = useState(false)
   const [hasSubmittedFinalResult, setHasSubmittedFinalResult] = useState(false)
+  
+  // Ready state management
+  const [isPlayerReady, setIsPlayerReady] = useState(false)
+  const [bothPlayersReady, setBothPlayersReady] = useState(false)
+  const [matchReady, setMatchReady] = useState(false)
+
+  // Local state to track current problem index for this player
+  const [myCurrentProblemIndex, setMyCurrentProblemIndex] = useState(0)
+  
+  // Force start timeout - if game doesn't start within 10 seconds, force it
+  useEffect(() => {
+    const forceStartTimeout = setTimeout(() => {
+      if (!matchReady && gameState && player1Id && player2Id) {
+        console.log('⏰ Force starting game after timeout - both players present')
+        setMatchReady(true)
+        setBothPlayersReady(true)
+      }
+    }, 10000) // 10 seconds
+    
+    return () => clearTimeout(forceStartTimeout)
+  }, [matchReady, gameState, player1Id, player2Id])
 
   const isPlayer1 = currentUserId === player1Id
   const playerId = isPlayer1 ? 'player1' : 'player2'
   
-  // Check if both players have answered the current question using shared state
-  const [sharedState, setSharedState] = useState<any>(null)
-  const lastSharedStateRef = useRef<string>('')
-  
-  useEffect(() => {
-    const checkSharedState = () => {
-      const stored = localStorage.getItem(`gameState_${matchId}`)
-      if (stored) {
-        // Only update if the stored state is actually different
-        if (stored !== lastSharedStateRef.current) {
-          lastSharedStateRef.current = stored
-          const parsed = JSON.parse(stored)
-          
-          console.log('🔄 Shared state updated:', {
-            p1Answers: parsed.player1Answers.length,
-            p2Answers: parsed.player2Answers.length,
-            currentIndex: parsed.currentProblemIndex
-          })
-          
-          setSharedState(parsed)
-        }
+  // Save game state to database
+  const saveGameStateToDatabase = useCallback(async (state: MultiplayerGameState, finalResult?: MultiplayerResult) => {
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      
+      // Get current game data to merge with existing data
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('game_data')
+        .eq('id', matchId)
+        .single()
+      
+      const currentGameData = matchData?.game_data || {}
+      
+      const updateData: any = {
+        gameState: state
       }
+      
+      // If we have a final result, save it too
+      if (finalResult) {
+        updateData.finalResult = finalResult
+        console.log('💾 Saving final result to database:', finalResult)
+      }
+      
+      await supabase
+        .from('matches')
+        .update({
+          game_data: {
+            ...currentGameData,
+            ...updateData
+          }
+        })
+        .eq('id', matchId)
+      
+      console.log('💾 Game state saved to database:', {
+        p1Finished: state.player1Finished,
+        p2Finished: state.player2Finished,
+        p1Answers: state.player1Answers.length,
+        p2Answers: state.player2Answers.length,
+        currentIndex: state.currentProblemIndex,
+        hasFinalResult: !!finalResult
+      })
+    } catch (error) {
+      console.error('Error saving game state to database:', error)
     }
-    checkSharedState()
-    const interval = setInterval(checkSharedState, 200) // Reduced frequency
-    return () => clearInterval(interval)
   }, [matchId])
 
-  const bothPlayersAnswered = sharedState && currentProblem && 
-    sharedState.player1Answers.length >= sharedState.currentProblemIndex + 1 &&
-    sharedState.player2Answers.length >= sharedState.currentProblemIndex + 1
-  
-  // Alternative check: if both players have answered at least the current problem
-  const bothPlayersAnsweredAlt = sharedState && currentProblem && 
-    sharedState.player1Answers.length > sharedState.currentProblemIndex &&
-    sharedState.player2Answers.length > sharedState.currentProblemIndex
-
-  // Final result synchronization - ensure both players see the same result
-  useEffect(() => {
-    if (!gameState || !gameState.player1Finished || !gameState.player2Finished) return
-
-    // Check if we have a shared final result
-    const finalResultKey = `finalResult_${matchId}`
-    const storedFinalResult = localStorage.getItem(finalResultKey)
+  // Handle player ready state
+  const handlePlayerReady = useCallback(async () => {
+    setIsPlayerReady(true)
     
-    if (storedFinalResult) {
-      const finalResult = JSON.parse(storedFinalResult)
-      console.log('🔄 Using synchronized final result:', finalResult)
-      setGameResult(finalResult)
-    } else if (gameResult) {
-      // Only store the result if we haven't already stored one
-      // This prevents both players from overwriting each other's results
-      const existingResult = localStorage.getItem(finalResultKey)
-      if (!existingResult) {
-        console.log('💾 Storing final result for synchronization:', gameResult)
-        localStorage.setItem(finalResultKey, JSON.stringify(gameResult))
-      } else {
-        console.log('🔄 Final result already exists, using existing one')
-        const existingFinalResult = JSON.parse(existingResult)
-        setGameResult(existingFinalResult)
-      }
-    }
-  }, [gameResult, matchId])
-
-  // Additional synchronization check - poll for final result if game is finished
-  useEffect(() => {
-    if (!gameState || !gameState.player1Finished || !gameState.player2Finished) return
-
-    const checkForFinalResult = () => {
-      const finalResultKey = `finalResult_${matchId}`
-      const storedFinalResult = localStorage.getItem(finalResultKey)
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
       
-      if (storedFinalResult) {
-        const finalResult = JSON.parse(storedFinalResult)
-        console.log('🔄 Polling found final result:', finalResult)
-        
-        // Force update the game result to ensure synchronization
-        setGameResult(finalResult)
-        
-        // Also update the game state to match the final result
-        if (finalResult.player1Result && finalResult.player2Result && gameState) {
-          console.log('🔄 Updating game state with final result data')
-          setGameState(prev => {
-            if (!prev) return prev
-            return {
-              ...prev,
-              player1Answers: finalResult.player1Result.answers || prev.player1Answers,
-              player2Answers: finalResult.player2Result.answers || prev.player2Answers,
-              player1Score: finalResult.player1Result.score || prev.player1Score,
-              player2Score: finalResult.player2Result.score || prev.player2Score
-            }
-          })
+      // Get current ready state from database
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('game_data')
+        .eq('id', matchId)
+        .single()
+      
+      const currentGameData = matchData?.game_data || {}
+      const currentReadyState = currentGameData.readyState || {
+        player1Ready: false,
+        player2Ready: false
+      }
+      
+      // Update ready state for current player
+      const newReadyState = {
+        ...currentReadyState,
+        [isPlayer1 ? 'player1Ready' : 'player2Ready']: true,
+        timestamp: Date.now()
+      }
+      
+      // Save to database
+      await supabase
+        .from('matches')
+        .update({
+          game_data: {
+            ...currentGameData,
+            readyState: newReadyState
+          }
+        })
+        .eq('id', matchId)
+      
+      console.log('✅ Ready state saved to database:', newReadyState)
+      
+      // Check if both players are ready
+      if (newReadyState.player1Ready && newReadyState.player2Ready) {
+        setBothPlayersReady(true)
+        // Start the game
+        if (gameState) {
+          setCurrentProblem(gameState.problems[0])
+          setTimeRemaining(gameState.problems[0].timeLimit)
+          // Remove turn-based logic - both players can answer independently
+          console.log('🚀 Both players ready! Starting game...')
         }
       }
+    } catch (error) {
+      console.error('Error saving ready state:', error)
     }
-
-    // Check immediately
-    checkForFinalResult()
+  }, [isPlayer1, matchId, gameState])
+  
+  // Check ready state from database
+  useEffect(() => {
+    const checkReadyState = async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        const { data: matchData } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
+        
+        if (matchData?.game_data?.readyState) {
+          const readyState = matchData.game_data.readyState
+          const playerReady = isPlayer1 ? readyState.player1Ready : readyState.player2Ready
+          const bothReady = readyState.player1Ready && readyState.player2Ready
+          
+          setIsPlayerReady(playerReady || false)
+          setBothPlayersReady(bothReady || false)
+          
+          if (bothReady && gameState && !currentProblem) {
+            setCurrentProblem(gameState.problems[0])
+            setTimeRemaining(gameState.problems[0].timeLimit)
+            // Remove turn-based logic - both players can answer independently
+            console.log('🚀 Both players ready! Starting game...')
+          }
+        }
+      } catch (error) {
+        console.error('Error checking ready state:', error)
+      }
+    }
     
-    // Poll every 500ms for final result
-    const interval = setInterval(checkForFinalResult, 500)
+    checkReadyState()
+    
+    // Poll for ready state changes every 2 seconds
+    const interval = setInterval(checkReadyState, 2000)
+    return () => clearInterval(interval)
+  }, [matchId, isPlayer1, gameState, currentProblem])
+  
+  // Check if both players have answered the current question using shared state
+  // Shared state tracking removed - everything now database-driven
+  const bothPlayersAnswered = gameState && currentProblem && 
+    gameState.player1Answers.length >= gameState.currentProblemIndex + 1 &&
+    gameState.player2Answers.length >= gameState.currentProblemIndex + 1
+  
+  // No alternative check needed - using database-driven state
+
+
+  // gameResult now synced via database polling - no localStorage needed
+
+  // Check and set finished flags based on current state - run more frequently
+  useEffect(() => {
+    if (!gameState) return
+    
+    // Check if both players have completed all problems based on their answers
+    const p1Completed = gameState.player1Answers.length >= gameState.problems.length
+    const p2Completed = gameState.player2Answers.length >= gameState.problems.length
+    
+    console.log('🔍 Checking finished state:', {
+      p1Answers: gameState.player1Answers.length,
+      p2Answers: gameState.player2Answers.length,
+      problemsLength: gameState.problems.length,
+      p1Completed,
+      p2Completed,
+      p1Finished: gameState.player1Finished,
+      p2Finished: gameState.player2Finished
+    })
+    
+    // Update finished flags if players have completed all problems
+    let needsUpdate = false
+    const updatedState = { ...gameState }
+    
+    // Only set finished to true if player has actually completed all problems
+    if (p1Completed && !gameState.player1Finished) {
+      updatedState.player1Finished = true
+      needsUpdate = true
+      console.log('🏁 Setting player1Finished = true (completed all problems)')
+    }
+    
+    if (p2Completed && !gameState.player2Finished) {
+      updatedState.player2Finished = true
+      needsUpdate = true
+      console.log('🏁 Setting player2Finished = true (completed all problems)')
+    }
+    
+    // Also check for incorrectly finished players (marked as finished but haven't completed)
+    if (gameState.player1Finished && !p1Completed) {
+      updatedState.player1Finished = false
+      needsUpdate = true
+      console.log('🔧 Correcting player1Finished = false (hasn\'t completed all problems)')
+    }
+    
+    if (gameState.player2Finished && !p2Completed) {
+      updatedState.player2Finished = false
+      needsUpdate = true
+      console.log('🔧 Correcting player2Finished = false (hasn\'t completed all problems)')
+    }
+    
+    // Check if both players are now finished and we don't have a result yet
+    if (updatedState.player1Finished && updatedState.player2Finished && p1Completed && p2Completed && !gameResult) {
+      console.log('🏁 Both players finished in finished state check! Calculating result...')
+      
+      // Calculate result directly since we know both players are finished
+      const result = calculateMultiplayerResult(updatedState)
+      console.log('🎯 Calculated new result (finished check):', result)
+      setGameResult(result)
+      saveGameStateToDatabase(updatedState, result)
+    }
+    
+    if (needsUpdate) {
+      console.log('✅ Updating finished flags:', {
+        p1Finished: updatedState.player1Finished,
+        p2Finished: updatedState.player2Finished,
+        bothFinished: updatedState.player1Finished && updatedState.player2Finished
+      })
+      
+      setGameState(updatedState)
+      saveGameStateToDatabase(updatedState)
+    }
+  }, [gameState, matchId, saveGameStateToDatabase])
+
+  // Force finished state check every 2 seconds to ensure synchronization
+  useEffect(() => {
+    if (!gameState) return
+    
+    const interval = setInterval(async () => {
+      console.log('⏰ Force checking finished state every 2s...')
+      
+      // First, try to get the latest state from database
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        const { data: matchData } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
+        
+        if (matchData?.game_data?.gameState) {
+          const dbState = matchData.game_data.gameState
+          console.log('⏰ Database state:', {
+            p1Finished: dbState.player1Finished,
+            p2Finished: dbState.player2Finished,
+            p1Answers: dbState.player1Answers?.length || 0,
+            p2Answers: dbState.player2Answers?.length || 0,
+            problemsLength: dbState.problems?.length || 0
+          })
+          
+          // Check if database has more up-to-date finished flags
+          const p1Completed = (dbState.player1Answers?.length || 0) >= (dbState.problems?.length || 0)
+          const p2Completed = (dbState.player2Answers?.length || 0) >= (dbState.problems?.length || 0)
+          
+          let needsUpdate = false
+          const updatedState = { ...gameState }
+          
+          // Update from database state if it's more current
+          if (dbState.player1Finished !== gameState.player1Finished) {
+            updatedState.player1Finished = dbState.player1Finished
+            needsUpdate = true
+            console.log('⏰ Syncing player1Finished from database:', dbState.player1Finished)
+          }
+          
+          if (dbState.player2Finished !== gameState.player2Finished) {
+            updatedState.player2Finished = dbState.player2Finished
+            needsUpdate = true
+            console.log('⏰ Syncing player2Finished from database:', dbState.player2Finished)
+          }
+          
+          // Also check if we need to set finished flags based on answer count
+          if (p1Completed && !updatedState.player1Finished) {
+            updatedState.player1Finished = true
+            needsUpdate = true
+            console.log('⏰ Force setting player1Finished = true based on answers')
+          }
+          
+          if (p2Completed && !updatedState.player2Finished) {
+            updatedState.player2Finished = true
+            needsUpdate = true
+            console.log('⏰ Force setting player2Finished = true based on answers')
+          }
+          
+          // Check for incorrectly finished players and correct them
+          if (updatedState.player1Finished && !p1Completed) {
+            updatedState.player1Finished = false
+            needsUpdate = true
+            console.log('⏰ Correcting player1Finished = false (hasn\'t completed all problems)')
+          }
+          
+          if (updatedState.player2Finished && !p2Completed) {
+            updatedState.player2Finished = false
+            needsUpdate = true
+            console.log('⏰ Correcting player2Finished = false (hasn\'t completed all problems)')
+          }
+          
+          if (needsUpdate) {
+            console.log('⏰ Force updating finished flags:', {
+              p1Finished: updatedState.player1Finished,
+              p2Finished: updatedState.player2Finished,
+              bothFinished: updatedState.player1Finished && updatedState.player2Finished
+            })
+            
+            setGameState(updatedState)
+            saveGameStateToDatabase(updatedState)
+          }
+        }
+      } catch (error) {
+        console.error('⏰ Error in force checking:', error)
+      }
+    }, 2000)
     
     return () => clearInterval(interval)
-  }, [matchId, gameResult])
+  }, [gameState, matchId, saveGameStateToDatabase])
+
+  // Final result synchronization now handled by database polling - no localStorage needed
   
   // Debug logging
   if (gameState && currentProblem) {
     console.log('🔍 Answer status check:', {
-      localState: {
+      gameState: {
         currentProblemIndex: gameState.currentProblemIndex,
         player1Answers: gameState.player1Answers.length,
         player2Answers: gameState.player2Answers.length,
         player1Score: gameState.player1Score,
         player2Score: gameState.player2Score,
       },
-      sharedState: sharedState ? {
-        currentProblemIndex: sharedState.currentProblemIndex,
-        player1Answers: sharedState.player1Answers.length,
-        player2Answers: sharedState.player2Answers.length,
-        player1Score: sharedState.player1Score,
-        player2Score: sharedState.player2Score,
-      } : null,
       bothPlayersAnswered,
-      bothPlayersAnsweredAlt,
       localAnswerSubmitted,
       playerId,
-      shouldShowWaiting: localAnswerSubmitted && !bothPlayersAnswered && !bothPlayersAnsweredAlt,
-      shouldShowBothAnswered: bothPlayersAnswered || bothPlayersAnsweredAlt
+      shouldShowWaiting: localAnswerSubmitted && !bothPlayersAnswered,
+      shouldShowBothAnswered: bothPlayersAnswered
     })
   }
 
   // Initialize game
   useEffect(() => {
-    if (!gameState) {
-      const initialState = initializeMultiplayerGame(matchId)
-      setGameState(initialState)
-      setCurrentProblem(initialState.problems[0])
-      setTimeRemaining(initialState.problems[0].timeLimit)
-      setIsMyTurn(true) // Both players can start immediately
+    const initializeGame = async () => {
+      console.log('🚀 Initializing game, current gameState:', !!gameState)
       
-      // Save initial state to localStorage for sharing between players
-      localStorage.setItem(`gameState_${matchId}`, JSON.stringify(initialState))
+      // Skip localStorage - everything will be loaded from database
       
-      console.log('🎮 Game initialized with timer:', initialState.problems[0].timeLimit)
-      console.log('🎮 Initial game state:', {
-        problems: initialState.problems.length,
-        currentIndex: initialState.currentProblemIndex,
-        player1Answers: initialState.player1Answers.length,
-        player2Answers: initialState.player2Answers.length
-      })
-    }
-  }, [matchId])
-
-  // Listen for storage events (when localStorage changes in other tabs)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `gameState_${matchId}` && e.newValue) {
-        console.log('🔄 Storage event detected, checking for updates...')
-        // The pollForUpdates function will handle this
+      // Only create a new game state if we don't have one
+      if (!gameState) {
+        console.log('🆕 Creating initial game state...')
+        const initialState = initializeMultiplayerGame(matchId)
+        setGameState(initialState)
+        setCurrentProblem(null)
+        setTimeRemaining(0)
+        // Remove turn-based logic - both players can answer independently
+        setBothPlayersReady(false)
+        setIsPlayerReady(false)
+        // Save initial state to database instead of localStorage
+        console.log('✅ Basic game state created')
       }
       
-      // Also listen for final result synchronization
-      if (e.key === `finalResult_${matchId}` && e.newValue) {
-        const finalResult = JSON.parse(e.newValue)
-        console.log('🔄 Final result sync received via storage event:', finalResult)
-        setGameResult(finalResult)
+      // Try to load from database in background
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        const { data: matchData, error } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
+        
+        if (matchData?.game_data && matchData.game_data.gameState) {
+          console.log('🔄 Found existing game state in database, loading...')
+          const savedState = matchData.game_data.gameState
+          
+          // If both players are finished, this is a completed game
+          if (savedState.player1Finished && savedState.player2Finished) {
+            console.log('🏁 Loading completed game state from database')
+            setGameState(savedState)
+            setMatchReady(true)
+            setBothPlayersReady(true)
+            
+            // Try to load the final result from database
+            const finalResult = matchData.game_data.finalResult
+            if (finalResult) {
+              console.log('🔄 Loading final result from database:', finalResult)
+              setGameResult(finalResult)
+            }
+            
+            return // Skip further processing for completed games
+          }
+          
+          setGameState(savedState)
+          
+          // Check if both players are ready from database
+          const readyState = matchData.game_data.readyState
+          const bothReady = readyState?.player1Ready && readyState?.player2Ready
+          
+          if (bothReady) {
+            setBothPlayersReady(true)
+            setMatchReady(true)
+            console.log('🚀 Both players ready, starting game!')
+            
+            // For independent play, find the next unanswered problem for this player
+            const playerAnswers = isPlayer1 ? savedState.player1Answers : savedState.player2Answers
+            const answeredProblemIds = playerAnswers.map(a => a.problemId)
+            
+            // Find the first problem this player hasn't answered
+            let nextProblemIndex = 0
+            for (let i = 0; i < savedState.problems.length; i++) {
+              if (!answeredProblemIds.includes(savedState.problems[i].id)) {
+                nextProblemIndex = i
+                break
+              }
+            }
+            
+            // If all problems are answered, show the last problem
+            if (nextProblemIndex === 0 && answeredProblemIds.length === savedState.problems.length) {
+              nextProblemIndex = savedState.problems.length - 1
+            }
+            
+            if (nextProblemIndex < savedState.problems.length) {
+              const problemToShow = savedState.problems[nextProblemIndex]
+              if (problemToShow) {
+                setCurrentProblem(problemToShow)
+                setTimeRemaining(problemToShow.timeLimit)
+                console.log('🔄 Restored current problem from database:', {
+                  problemId: problemToShow.id,
+                  question: problemToShow.question,
+                  problemIndex: nextProblemIndex,
+                  playerAnswers: playerAnswers.length,
+                  totalProblems: savedState.problems.length
+                })
+              }
+            }
+          } else {
+            // Set ready state from database
+            if (readyState) {
+              const playerReady = isPlayer1 ? readyState.player1Ready : readyState.player2Ready
+              setIsPlayerReady(playerReady || false)
+            }
+          }
+          
+            // Save to database for persistence
+            saveGameStateToDatabase(savedState)
+        } else {
+          // Save initial state to database
+          const initialState = initializeMultiplayerGame(matchId)
+          await supabase
+            .from('matches')
+            .update({
+              game_data: {
+                gameState: initialState
+              }
+            })
+            .eq('id', matchId)
+          console.log('💾 Saved initial game state to database')
+        }
+      } catch (error) {
+        console.error('Error with database operations:', error)
+        // Continue with the basic game state we already created
       }
     }
-
-    window.addEventListener('storage', handleStorageChange)
     
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
+    initializeGame()
+  }, [matchId, isPlayer1])
+
+  // Storage events removed - using database polling instead
+
+  // Poll for database updates to sync between players
+  useEffect(() => {
+    let isUpdating = false
+    
+    const pollForDatabaseUpdates = async () => {
+      if (!gameState || isUpdating) return
+      
+      isUpdating = true
+      
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        const { data: matchData, error } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
+        
+        if (matchData?.game_data?.gameState) {
+          const dbState = matchData.game_data.gameState
+          
+          // Check if database state is different from component's gameState
+          // Check for any changes in finished state, scores, or problem index
+          const hasSignificantChanges = 
+            !gameState ||
+            dbState.player1Finished !== gameState.player1Finished ||
+            dbState.player2Finished !== gameState.player2Finished ||
+            dbState.currentProblemIndex !== gameState.currentProblemIndex ||
+            dbState.player1Score !== gameState.player1Score ||
+            dbState.player2Score !== gameState.player2Score ||
+            (dbState.player1Answers?.length || 0) !== (gameState.player1Answers?.length || 0) ||
+            (dbState.player2Answers?.length || 0) !== (gameState.player2Answers?.length || 0)
+          
+          if (hasSignificantChanges) {
+            console.log('🔄 Significant changes detected, updating...')
+            console.log('🔄 Database state:', {
+              p1Finished: dbState.player1Finished,
+              p2Finished: dbState.player2Finished,
+              currentIndex: dbState.currentProblemIndex,
+              problemsLength: dbState.problems.length
+            })
+            console.log('🔄 Component state before update:', {
+              p1Finished: gameState?.player1Finished,
+              p2Finished: gameState?.player2Finished,
+              currentIndex: gameState?.currentProblemIndex,
+              problemsLength: gameState?.problems?.length
+            })
+            
+            // Check if we need to force set finished flags based on answer count
+            const p1Completed = (dbState.player1Answers?.length || 0) >= (dbState.problems?.length || 0)
+            const p2Completed = (dbState.player2Answers?.length || 0) >= (dbState.problems?.length || 0)
+            
+            let finalDbState = { ...dbState }
+            
+            // Force set finished flags if players have completed all problems
+            if (p1Completed && !dbState.player1Finished) {
+              finalDbState.player1Finished = true
+              console.log('🔄 Force setting player1Finished = true in database sync')
+            }
+            
+            if (p2Completed && !dbState.player2Finished) {
+              finalDbState.player2Finished = true
+              console.log('🔄 Force setting player2Finished = true in database sync')
+            }
+            
+            // Correct incorrectly finished players
+            if (dbState.player1Finished && !p1Completed) {
+              finalDbState.player1Finished = false
+              console.log('🔄 Correcting player1Finished = false in database sync (hasn\'t completed all problems)')
+            }
+            
+            if (dbState.player2Finished && !p2Completed) {
+              finalDbState.player2Finished = false
+              console.log('🔄 Correcting player2Finished = false in database sync (hasn\'t completed all problems)')
+            }
+            
+            // Update local state with database state
+            console.log('🔄 Updating local state from database:', {
+              p1Finished: finalDbState.player1Finished,
+              p2Finished: finalDbState.player2Finished,
+              currentIndex: finalDbState.currentProblemIndex,
+              p1Answers: finalDbState.player1Answers?.length || 0,
+              p2Answers: finalDbState.player2Answers?.length || 0,
+              problemsLength: finalDbState.problems?.length || 0
+            })
+            setGameState(finalDbState)
+            
+            // Save the updated state back to database if we made changes
+            if (finalDbState.player1Finished !== dbState.player1Finished || 
+                finalDbState.player2Finished !== dbState.player2Finished) {
+              console.log('🔄 Saving updated finished flags to database')
+              saveGameStateToDatabase(finalDbState)
+            }
+            
+            // Update current problem if needed - only if both players haven't finished
+            if (dbState.currentProblemIndex < dbState.problems.length && 
+                !(dbState.player1Finished && dbState.player2Finished)) {
+              setCurrentProblem(dbState.problems[dbState.currentProblemIndex])
+              setTimeRemaining(dbState.problems[dbState.currentProblemIndex].timeLimit)
+            } else if (dbState.player1Finished && dbState.player2Finished) {
+              // Both players finished, clear current problem
+              setCurrentProblem(null)
+              console.log('🏁 Both players finished, clearing current problem')
+            } else {
+              // One player finished but not both, keep current problem if it exists
+              console.log('⏳ One player finished, keeping current problem for other player')
+            }
+          }
+        }
+        
+        // Also check for ready state updates
+        if (matchData?.game_data?.readyState) {
+          const readyState = matchData.game_data.readyState
+          const bothReady = readyState.player1Ready && readyState.player2Ready
+          
+          if (bothReady && !bothPlayersReady) {
+            setBothPlayersReady(true)
+            if (gameState && !currentProblem) {
+              setCurrentProblem(gameState.problems[0])
+              setTimeRemaining(gameState.problems[0].timeLimit)
+              // Remove turn-based logic - both players can answer independently
+              console.log('🚀 Both players ready! Starting game...')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling for database updates:', error)
+      } finally {
+        isUpdating = false
+      }
     }
-  }, [matchId])
+    
+    // Poll every 3 seconds to reduce flickering
+    const interval = setInterval(pollForDatabaseUpdates, 3000)
+    return () => clearInterval(interval)
+  }, [matchId, gameState, bothPlayersReady, currentProblem])
 
   // Timer countdown
   useEffect(() => {
@@ -237,12 +691,7 @@ export default function MultiplayerMathBlitz({
         if (prev <= 1) {
           // Time's up - submit no answer
           console.log('⏰ Time up! Submitting no answer')
-          if (!localAnswerSubmitted) {
-            console.log('⏰ Calling handleAnswer(-1) for timeout')
           handleAnswer(-1) // -1 indicates no answer/timeout
-          } else {
-            console.log('⏰ Already answered, skipping timeout submission')
-          }
           return 0
         }
         return prev - 1
@@ -250,17 +699,19 @@ export default function MultiplayerMathBlitz({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [currentProblem]) // Depend on currentProblem
+  }, [currentProblem]) // Only depend on currentProblem
 
-  // Update opponent progress from game state (which includes merged data)
+  // Update opponent progress from game state - only when specific values change to prevent infinite loops
   useEffect(() => {
     if (!gameState) return
     
     const opponentAnswers = isPlayer1 ? gameState.player2Answers : gameState.player1Answers
     const opponentScore = isPlayer1 ? gameState.player2Score : gameState.player1Score
     
-    setOpponentProgress(opponentAnswers.length)
-    
+    // Only update if the value actually changed to prevent infinite loops
+    setOpponentProgress(prev => {
+      const newProgress = opponentAnswers.length
+      if (prev !== newProgress) {
     console.log('🔄 Opponent progress updated from game state:', {
       isPlayer1,
       opponentAnswers: opponentAnswers.length,
@@ -270,117 +721,208 @@ export default function MultiplayerMathBlitz({
       p1AnswersLength: gameState.player1Answers?.length || 0,
       p2AnswersLength: gameState.player2Answers?.length || 0
     })
-  }, [gameState, isPlayer1])
+        return newProgress
+      }
+      return prev
+    })
+  }, [gameState?.player1Answers?.length, gameState?.player2Answers?.length, gameState?.player1Score, gameState?.player2Score, isPlayer1])
 
-  // Update current problem when game state changes
+  // Initialize current problem when game starts
   useEffect(() => {
-    if (!gameState) return
+    if (!gameState || !gameState.problems || !bothPlayersReady) return
+    if (currentProblem) return // Already initialized
     
-    console.log('🔄 Game state changed, updating current problem:', {
-      currentProblemIndex: gameState.currentProblemIndex,
-      problemsLength: gameState.problems.length
+    // Start with the first problem
+    console.log('🚀 Initializing first problem:', gameState.problems[0]?.question)
+    setCurrentProblem(gameState.problems[0])
+    setTimeRemaining(gameState.problems[0]?.timeLimit || 15)
+    setMyCurrentProblemIndex(0)
+  }, [gameState?.problems, bothPlayersReady, currentProblem])
+  
+  // Simple: update problem when index changes
+  useEffect(() => {
+    console.log('🔍 useEffect triggered:', { 
+      hasProblems: !!gameState?.problems, 
+      myCurrentProblemIndex, 
+      problemsLength: gameState?.problems?.length,
+      currentProblemQuestion: currentProblem?.question
     })
     
-    // Check if game is finished first
-    if (gameState.player1Finished && gameState.player2Finished) {
-      console.log('🏁 Game finished, not updating problem')
+    if (!gameState?.problems || myCurrentProblemIndex < 0) {
+      console.log('❌ Bailing out:', { hasProblems: !!gameState?.problems, index: myCurrentProblemIndex })
       return
     }
     
-    // Update current problem if index changed and game is not finished
-    if (gameState.currentProblemIndex < gameState.problems.length) {
-      const newProblem = gameState.problems[gameState.currentProblemIndex]
-      if (newProblem) {
-        console.log('➡️ Updating to new problem:', {
-          problemId: newProblem.id,
-          currentIndex: gameState.currentProblemIndex,
-          totalProblems: gameState.problems.length,
-          player1Answers: gameState.player1Answers.length,
-          player2Answers: gameState.player2Answers.length
-        })
-        setCurrentProblem(newProblem)
-        setTimeRemaining(newProblem.timeLimit)
-        setHasAnsweredCurrentProblem(false) // Reset answer flag for new question
-        setLocalAnswerSubmitted(false) // Reset local answer flag for new question
+    const problem = gameState.problems[myCurrentProblemIndex]
+    console.log('📋 Found problem:', { index: myCurrentProblemIndex, question: problem?.question, isDifferent: problem !== currentProblem })
+    
+    if (problem) {
+      // Check if it's actually a different problem (by ID or question)
+      const isDifferent = !currentProblem || problem.id !== currentProblem.id || problem.question !== currentProblem.question
+      
+      if (isDifferent) {
+        console.log('✅ Updating problem:', problem.question)
+        setCurrentProblem(problem)
+        setTimeRemaining(problem.timeLimit)
+        setLocalAnswerSubmitted(false) // Reset here
+        console.log('✅ Cleared localAnswerSubmitted')
       }
-    } else {
-      console.log('⚠️ Problem index out of bounds:', {
-        currentIndex: gameState.currentProblemIndex,
-        problemsLength: gameState.problems.length,
-        p1Finished: gameState.player1Finished,
-        p2Finished: gameState.player2Finished,
-        player1Answers: gameState.player1Answers.length,
-        player2Answers: gameState.player2Answers.length
-      })
+      } else {
+      console.log('⚠️ Problem not found at index:', myCurrentProblemIndex)
     }
-  }, [gameState])
-
-  // Simple polling to sync state between players
+  }, [myCurrentProblemIndex, gameState?.problems])
+  
+  // Always clear localAnswerSubmitted when problem changes
   useEffect(() => {
-    const pollForUpdates = () => {
-      const sharedState = localStorage.getItem(`gameState_${matchId}`)
-      if (sharedState) {
-        const parsedState = JSON.parse(sharedState)
+    if (currentProblem) {
+      console.log('🔄 Problem ID changed to:', currentProblem.id)
+      setLocalAnswerSubmitted(false)
+      console.log('✅ Set localAnswerSubmitted to false')
+    }
+  }, [currentProblem?.id])
+
+  // Database-only polling to sync state between players
+  useEffect(() => {
+    const pollDatabaseForUpdates = async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
         
-        // Don't update sharedState here to avoid infinite loops
-        // The main polling useEffect will handle sharedState updates
+        const { data: matchData, error } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
         
-        // Stop polling if game is finished to prevent infinite loops
-        if (parsedState.player1Finished && parsedState.player2Finished) {
-          console.log('🏁 Game finished, stopping polling to prevent infinite loops')
-          console.log('🏁 Final state when stopping polling:', {
-            player1Finished: parsedState.player1Finished,
-            player2Finished: parsedState.player2Finished,
-            player1Answers: parsedState.player1Answers?.length || 0,
-            player2Answers: parsedState.player2Answers?.length || 0,
-            gameResult: gameResult
-          })
+        if (error) {
+          console.error('❌ Error polling database:', error)
           return
         }
         
-        // Sync the state and handle game completion
+        if (matchData?.game_data?.gameState) {
+          const dbState = matchData.game_data.gameState
+          
+          // Check if game is completed
+          if (dbState.player1Finished && dbState.player2Finished) {
+            console.log('🏁 Game completed, loading final result from database')
+            const finalResult = matchData.game_data.finalResult
+            if (finalResult && !gameResult) {
+              setGameResult(finalResult)
+              console.log('🔄 Final result loaded from database:', finalResult)
+              return
+            }
+          }
+          
+          // Sync the state from database
         setGameState(currentState => {
           if (!currentState) return currentState
           
-          if (parsedState.currentProblemIndex !== currentState.currentProblemIndex ||
-              parsedState.player1Answers.length !== currentState.player1Answers.length ||
-              parsedState.player2Answers.length !== currentState.player2Answers.length ||
-              parsedState.player1Score !== currentState.player1Score ||
-              parsedState.player2Score !== currentState.player2Score ||
-              parsedState.player1Finished !== currentState.player1Finished ||
-              parsedState.player2Finished !== currentState.player2Finished) {
-            
-            console.log('🔄 Syncing state from shared:', {
-              sharedIndex: parsedState.currentProblemIndex,
+            if (dbState.currentProblemIndex !== currentState.currentProblemIndex ||
+                dbState.player1Answers.length !== currentState.player1Answers.length ||
+                dbState.player2Answers.length !== currentState.player2Answers.length ||
+                dbState.player1Score !== currentState.player1Score ||
+                dbState.player2Score !== currentState.player2Score ||
+                dbState.player1Finished !== currentState.player1Finished ||
+                dbState.player2Finished !== currentState.player2Finished) {
+              
+              console.log('🔄 Syncing state from database:', {
+                dbIndex: dbState.currentProblemIndex,
               localIndex: currentState.currentProblemIndex,
-              sharedP1: parsedState.player1Answers.length,
+                dbP1: dbState.player1Answers.length,
               localP1: currentState.player1Answers.length,
-              sharedP2: parsedState.player2Answers.length,
+                dbP2: dbState.player2Answers.length,
               localP2: currentState.player2Answers.length,
-              sharedP1Score: parsedState.player1Score,
+                dbP1Score: dbState.player1Score,
               localP1Score: currentState.player1Score,
-              sharedP2Score: parsedState.player2Score,
+                dbP2Score: dbState.player2Score,
               localP2Score: currentState.player2Score,
-              gameFinished: parsedState.player1Finished && parsedState.player2Finished
-            })
-            
-            // Game completion is handled in handleAnswer function
-            // This polling function only handles state synchronization
-            
-            // Return the merged state to ensure opponent data is preserved
-            return parsedState
+                gameFinished: dbState.player1Finished && dbState.player2Finished
+              })
+              
+              // Check if both players are now finished after syncing
+              const bothFinished = dbState.player1Finished && dbState.player2Finished
+              const p1ActuallyFinished = dbState.player1Answers.length >= dbState.problems.length
+              const p2ActuallyFinished = dbState.player2Answers.length >= dbState.problems.length
+              
+              if (bothFinished && p1ActuallyFinished && p2ActuallyFinished && !gameResult) {
+                console.log('🏁 Database polling detected both players finished! Calculating result...')
+                
+                const finalResult = matchData.game_data.finalResult
+                if (finalResult) {
+                  console.log('🔄 Using existing result from database (polling):', finalResult)
+                  setGameResult(finalResult)
+                } else {
+                  const result = calculateMultiplayerResult(dbState)
+                  console.log('🎯 Calculated new result (database polling):', result)
+                  setGameResult(result)
+                  saveGameStateToDatabase(dbState, result)
+                }
+              }
+              
+              // Return the database state
+              return dbState
           }
           
           return currentState
         })
+        }
+      } catch (error) {
+        console.error('❌ Error in database polling:', error)
       }
     }
 
-    const interval = setInterval(pollForUpdates, 200) // Simple polling every 200ms
+    const interval = setInterval(pollDatabaseForUpdates, 1000) // Poll database every 1 second
+    return () => clearInterval(interval)
+  }, [matchId, gameResult])
+
+  // Check if match is ready to start by looking at match status
+  useEffect(() => {
+    const checkMatchStatus = async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        const { data: matchData } = await supabase
+          .from('matches')
+          .select('status, game_data')
+          .eq('id', matchId)
+          .single()
+        
+        if (matchData) {
+          console.log('🔍 Match status:', matchData.status)
+          // If match status is 'in_progress' or 'waiting' with both players, consider it ready
+          if (matchData.status === 'in_progress') {
+            setMatchReady(true)
+            setBothPlayersReady(true)
+            console.log('✅ Match is in progress, starting game...')
+          } else if (matchData.status === 'waiting' && player1Id && player2Id) {
+            // If match is waiting but both players are present, start the game
+            setMatchReady(true)
+            setBothPlayersReady(true)
+            console.log('✅ Match is waiting but both players present, starting game...')
+          }
+        }
+      } catch (error) {
+        console.error('Error checking match status:', error)
+      }
+    }
+    
+    checkMatchStatus()
+    // Check every 2 seconds
+    const interval = setInterval(checkMatchStatus, 2000)
     return () => clearInterval(interval)
   }, [matchId])
 
   const handleAnswer = useCallback((answer: number) => {
+    console.log('🎯 HandleAnswer called:', { 
+      answer, 
+      hasGameState: !!gameState, 
+      hasCurrentProblem: !!currentProblem,
+      // isMyTurn, // Removed turn-based logic
+      localAnswerSubmitted,
+      currentProblemIndex: gameState?.currentProblemIndex
+    })
+    
     if (!gameState || !currentProblem) {
       console.log('⚠️ Cannot answer - missing state:', { 
         hasGameState: !!gameState, 
@@ -388,17 +930,52 @@ export default function MultiplayerMathBlitz({
       })
       return
     }
-
-    if (localAnswerSubmitted) {
-      console.log('⚠️ Cannot answer - already answered this question:', { 
-        localAnswerSubmitted,
-        currentProblemIndex: gameState.currentProblemIndex,
-        playerId
+    
+    // Additional safety check - ensure the current problem index is valid
+    if (gameState.currentProblemIndex >= gameState.problems.length) {
+      console.log('⚠️ Cannot answer - current problem index is out of bounds:', {
+        currentIndex: gameState.currentProblemIndex,
+        problemsLength: gameState.problems.length
       })
+      console.log('🔧 Attempting to fix out of bounds index...')
+      
+      // Fix the out of bounds index by setting it to the last valid index
+      const fixedIndex = Math.min(gameState.currentProblemIndex, gameState.problems.length - 1)
+      console.log('🔧 Fixed index:', fixedIndex)
+      
+      // Update the game state with the corrected index
+      const correctedGameState = {
+        ...gameState,
+        currentProblemIndex: fixedIndex
+      }
+      
+      setGameState(correctedGameState)
+      saveGameStateToDatabase(correctedGameState)
+      
+      // Update the current problem to match the corrected index
+      if (correctedGameState.problems[fixedIndex]) {
+        setCurrentProblem(correctedGameState.problems[fixedIndex])
+        setTimeRemaining(correctedGameState.problems[fixedIndex].timeLimit)
+        console.log('🔧 Updated current problem to index:', fixedIndex)
+      }
+      
       return
     }
 
-    console.log('🎯 Answer submitted:', { answer, currentProblemIndex: gameState.currentProblemIndex, playerId })
+    if (localAnswerSubmitted) {
+      console.log('⚠️ Already submitting answer, ignoring')
+      return
+    }
+
+    console.log('🎯 ANSWERING NOW:', { answer, problemIndex: myCurrentProblemIndex, playerId })
+    
+    // Check if myCurrentProblemIndex is out of sync
+    const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
+    if (currentPlayerAnswers.length > 0 && myCurrentProblemIndex === 0) {
+      console.log('🔧 SYNC ISSUE: myCurrentProblemIndex is 0 but have', currentPlayerAnswers.length, 'answers. Fixing...')
+      setMyCurrentProblemIndex(currentPlayerAnswers.length)
+      // Don't return - let the answer be processed
+    }
     console.log('🎯 Player details:', { isPlayer1, playerId, currentUserId, player1Id })
     console.log('🎯 Current game state before answer:', {
       currentProblemIndex: gameState.currentProblemIndex,
@@ -411,9 +988,34 @@ export default function MultiplayerMathBlitz({
     
     // Mark as answered locally to prevent multiple clicks
     setLocalAnswerSubmitted(true)
+    console.log('🔒 Set localAnswerSubmitted = true for', playerId)
     
     const timeSpent = currentProblem.timeLimit - timeRemaining
-    const newGameState = submitPlayerAnswer(gameState, playerId, answer, timeSpent)
+    
+    // Simple: just add the answer to this player's array
+    // currentPlayerAnswers already declared above
+    const isCorrect = answer === currentProblem.answer
+    
+    // Check if already answered this problem
+    if (currentPlayerAnswers.some(a => a.problemId === currentProblem.id)) {
+      console.log('⚠️ Already answered this problem, but allowing to proceed')
+      // Don't return - let it process anyway to move forward
+    }
+    
+    const playerAnswer = {
+      problemId: currentProblem.id,
+      answer,
+      isCorrect,
+      timeSpent,
+      timestamp: Date.now()
+    }
+    
+    // Update game state with new answer
+    const newGameState = {
+      ...gameState,
+      [isPlayer1 ? 'player1Answers' : 'player2Answers']: [...currentPlayerAnswers, playerAnswer],
+      [isPlayer1 ? 'player1Score' : 'player2Score']: gameState[isPlayer1 ? 'player1Score' : 'player2Score'] + (isCorrect ? 10 : 0)
+    }
     
     console.log('🔄 New game state after submitPlayerAnswer:', { 
       currentProblemIndex: newGameState.currentProblemIndex, 
@@ -443,178 +1045,55 @@ export default function MultiplayerMathBlitz({
       })
     }
     
-    // Save updated state to localStorage for sharing between players
-    // Always merge with existing shared state to preserve opponent's data
-    const existingSharedState = localStorage.getItem(`gameState_${matchId}`)
-    let stateToSave = newGameState
+    // Update and save
+    setGameState(newGameState)
+    saveGameStateToDatabase(newGameState)
     
-    if (existingSharedState) {
-      try {
-        const parsedExisting = JSON.parse(existingSharedState)
-        console.log('🔄 Existing shared state found:', {
-          p1Answers: parsedExisting.player1Answers?.length || 0,
-          p2Answers: parsedExisting.player2Answers?.length || 0,
-          p1Score: parsedExisting.player1Score || 0,
-          p2Score: parsedExisting.player2Score || 0
-        })
-        
-        // Always merge both players' data to ensure nothing is lost
-        stateToSave = {
-          ...newGameState,
-          // Preserve opponent's answers and score
-          player1Answers: isPlayer1 ? newGameState.player1Answers : (parsedExisting.player1Answers || []),
-          player2Answers: !isPlayer1 ? newGameState.player2Answers : (parsedExisting.player2Answers || []),
-          player1Score: isPlayer1 ? newGameState.player1Score : (parsedExisting.player1Score || 0),
-          player2Score: !isPlayer1 ? newGameState.player2Score : (parsedExisting.player2Score || 0)
-        }
-        
-        console.log('🔄 Merged state created:', {
-          p1Answers: stateToSave.player1Answers.length,
-          p2Answers: stateToSave.player2Answers.length,
-          p1Score: stateToSave.player1Score,
-          p2Score: stateToSave.player2Score,
-          isPlayer1
-        })
-      } catch (error) {
-        console.error('Error parsing existing shared state:', error)
-        // If parsing fails, just use the new state
-        stateToSave = newGameState
-      }
-    }
+    // Check if finished
+    const myAnswers = isPlayer1 ? newGameState.player1Answers : newGameState.player2Answers
+    const isFinished = myAnswers.length >= gameState.problems.length
     
-    localStorage.setItem(`gameState_${matchId}`, JSON.stringify(stateToSave))
-    console.log('💾 Saved merged game state to localStorage for sharing:', {
-      matchId,
-      playerId,
-      p1Answers: stateToSave.player1Answers.length,
-      p2Answers: stateToSave.player2Answers.length,
-      currentIndex: stateToSave.currentProblemIndex
-    })
+    // Move to next problem
+    const nextIndex = myAnswers.length
+    console.log(`⏭️ Moving to problem ${nextIndex + 1}, current: ${myCurrentProblemIndex}`)
     
-    // Update local game state with merged data to show opponent's progress
-    setGameState(stateToSave)
-    console.log('🔄 Game state updated in component with merged data')
-
-    // Reset local answer flag for next question
-    setLocalAnswerSubmitted(false)
-    setHasAnsweredCurrentProblem(false)
+    // Update immediately
+    setMyCurrentProblemIndex(nextIndex)
     
-    // Check if this player is finished (using the merged state)
-    console.log('🔍 Checking if player finished:', {
-      currentIndex: stateToSave.currentProblemIndex,
-      problemsLength: stateToSave.problems.length,
-      isFinished: stateToSave.currentProblemIndex >= stateToSave.problems.length,
-      p1Finished: stateToSave.player1Finished,
-      p2Finished: stateToSave.player2Finished
-    })
-    
-    // Force mark player as finished if we're past the last question
-    if (stateToSave.currentProblemIndex >= stateToSave.problems.length) {
-      console.log('🏁 Player is past last question, forcing finish state')
-      if (isPlayer1) {
-        stateToSave.player1Finished = true
-      } else {
-        stateToSave.player2Finished = true
-      }
-    }
-    
-    if (stateToSave.currentProblemIndex >= stateToSave.problems.length) {
-      console.log('🏁 This player finished!')
-      const finishedState: MultiplayerGameState = {
-        ...stateToSave, // Use the merged state instead of newGameState
-        gameEndTime: Date.now(),
-        // Only mark the current player as finished
-        player1Finished: isPlayer1 ? true : (stateToSave.player1Finished || false),
-        player2Finished: !isPlayer1 ? true : (stateToSave.player2Finished || false),
-        winner: 'draw' // Will be calculated properly by calculateMultiplayerResult
-      }
-      
-      console.log('🎯 Player finished! Updated state:', {
-        isPlayer1: isPlayer1,
-        player1Finished: finishedState.player1Finished,
-        player2Finished: finishedState.player2Finished,
-        player1Answers: finishedState.player1Answers.length,
-        player2Answers: finishedState.player2Answers.length
-      })
-      localStorage.setItem(`gameState_${matchId}`, JSON.stringify(finishedState))
-      setGameState(finishedState)
-      
-      // Only calculate and submit final result if BOTH players have finished
-      console.log('🔍 Checking if both players finished:', {
-        player1Finished: finishedState.player1Finished,
-        player2Finished: finishedState.player2Finished,
-        isPlayer1: isPlayer1,
-        currentUserId: currentUserId,
-        player1Id: player1Id,
-        player2Id: player2Id
-      })
-      
-      if (finishedState.player1Finished && finishedState.player2Finished) {
-        console.log('🏁 Both players finished! Calculating final result...')
-        
-        // Check if result already exists in localStorage
-        const finalResultKey = `finalResult_${matchId}`
-        const existingResult = localStorage.getItem(finalResultKey)
-        
-        if (existingResult) {
-          // Use existing result
-          const result = JSON.parse(existingResult)
-          console.log('🔄 Using existing result from localStorage:', result)
-          setGameResult(result)
-        } else {
-          // Calculate new result
-          const result = calculateMultiplayerResult(finishedState)
-          console.log('🎯 Calculated new result:', result)
-          
-          // Store the result for synchronization
-          localStorage.setItem(finalResultKey, JSON.stringify(result))
-          setGameResult(result)
-          
-          // Only call onGameComplete if we haven't already submitted the final result
-          const submissionKey = `finalResultSubmitted_${matchId}`
-          const currentSubmission = localStorage.getItem(submissionKey)
-          
-          if (!currentSubmission && !hasSubmittedFinalResult) {
-            try {
-              localStorage.setItem(submissionKey, playerId)
-              const verification = localStorage.getItem(submissionKey)
-              if (verification === playerId) {
-                console.log('🎮 Calling onGameComplete with result:', result)
-                setHasSubmittedFinalResult(true)
-                onGameComplete?.(result)
-              } else {
-                console.log('🔄 Another player got the lock first, skipping onGameComplete')
-              }
-            } catch (error) {
-              console.log('🔄 Failed to set submission flag, skipping onGameComplete')
-            }
-          } else {
-            console.log('🔄 Final result already submitted, skipping onGameComplete')
-          }
-        }
-    } else {
-        console.log('⏳ Waiting for opponent to finish...', {
-          p1Finished: finishedState.player1Finished,
-          p2Finished: finishedState.player2Finished,
-          isPlayer1
-        })
-      }
-    }
-    
-    // Trigger a manual check for shared state updates
+    // Force update the problem after a short delay in case the useEffect doesn't trigger
     setTimeout(() => {
-      const sharedState = localStorage.getItem(`gameState_${matchId}`)
-      if (sharedState) {
-        const parsedState = JSON.parse(sharedState)
-        console.log('🔄 Manual check after answer:', {
-          sharedP1: parsedState.player1Answers.length,
-          sharedP2: parsedState.player2Answers.length,
-          localP1: newGameState.player1Answers.length,
-          localP2: newGameState.player2Answers.length
-        })
+      console.log('⏰ Timeout: Forcing problem update', { nextIndex, problemsLength: newGameState.problems.length })
+      if (newGameState.problems[nextIndex]) {
+        console.log('✅ Updating to problem:', newGameState.problems[nextIndex].question)
+        setCurrentProblem(newGameState.problems[nextIndex])
+        setTimeRemaining(newGameState.problems[nextIndex].timeLimit)
+    setLocalAnswerSubmitted(false)
+      } else {
+        console.log('❌ Problem not found at index:', nextIndex)
       }
-    }, 100)
-  }, [currentProblem, playerId, onGameComplete, localAnswerSubmitted])
+    }, 200)
+    
+    // Check if finished
+    if (isFinished) {
+      const finishedState = {
+        ...newGameState,
+        [isPlayer1 ? 'player1Finished' : 'player2Finished']: true
+      }
+      setGameState(finishedState)
+      saveGameStateToDatabase(finishedState)
+      
+      // Check if both done
+      const p1Done = finishedState.player1Answers.length >= gameState.problems.length
+      const p2Done = finishedState.player2Answers.length >= gameState.problems.length
+      
+      if (p1Done && p2Done) {
+          const result = calculateMultiplayerResult(finishedState)
+          setGameResult(result)
+        saveGameStateToDatabase(finishedState, result)
+        onGameComplete?.(result.winner)
+      }
+    }
+  }, [gameState, currentProblem, isPlayer1, onGameComplete])
 
   const handleStartGame = () => {
     setShowInstructions(false)
@@ -647,7 +1126,7 @@ export default function MultiplayerMathBlitz({
                 </div>
                 <div className="flex items-center space-x-3">
                   <Trophy className="h-5 w-5 text-orange-500" />
-                  <span>Winner determined by score, then accuracy, then speed</span>
+                  <span>Winner determined by overall score (points + accuracy + speed)</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Zap className="h-5 w-5 text-orange-500" />
@@ -821,7 +1300,8 @@ export default function MultiplayerMathBlitz({
     )
   }
 
-  if (!currentProblem || !gameState) {
+  if (!gameState) {
+    console.log('🔄 No game state, showing loading...')
     return (
       <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
         <CardContent className="text-center py-12">
@@ -832,7 +1312,8 @@ export default function MultiplayerMathBlitz({
     )
   }
 
-  // Don't render questions if both players are finished OR if we're past the last question
+
+  // Don't render questions if both players are finished
   if (gameState.player1Finished && gameState.player2Finished) {
     console.log('🏁 Game finished, not rendering questions')
     console.log('🏁 GameResult status:', {
@@ -949,9 +1430,10 @@ export default function MultiplayerMathBlitz({
     }
   }
   
-  // Also don't render if we're past the last question (safety check)
-  if (gameState.currentProblemIndex >= gameState.problems.length) {
-    console.log('⚠️ Past last question, not rendering questions:', {
+  // Also don't render if we're past the last question AND both players are finished
+  if (gameState.currentProblemIndex >= gameState.problems.length && 
+      gameState.player1Finished && gameState.player2Finished) {
+    console.log('⚠️ Past last question and both players finished, not rendering questions:', {
       currentIndex: gameState.currentProblemIndex,
       problemsLength: gameState.problems.length,
       p1Finished: gameState.player1Finished,
@@ -1068,25 +1550,230 @@ export default function MultiplayerMathBlitz({
       }
     }
     
+    // If one player is finished but the other isn't, show waiting screen
+    if ((gameState.player1Finished && !gameState.player2Finished) || 
+        (!gameState.player1Finished && gameState.player2Finished)) {
+      console.log('⏳ One player finished, waiting for the other from past last question check...')
+      console.log('⏳ Finished state details:', {
+        p1Finished: gameState.player1Finished,
+        p2Finished: gameState.player2Finished,
+        isPlayer1: isPlayer1,
+        currentUserId: currentUserId,
+        player1Id: player1Id,
+        player2Id: player2Id,
+        currentIndex: gameState.currentProblemIndex,
+        totalProblems: gameState.problems.length
+      })
+      return (
+        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <CardContent className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+            <p className="text-gray-400">Waiting for your opponent to finish...</p>
+            <p className="text-sm text-gray-500 mt-2">
+              {isPlayer1 ? 'Player 2' : 'Player 1'} is still working on their questions
+            </p>
+          </CardContent>
+        </Card>
+      )
+    }
+    
     return null
   }
 
-  return (
-    <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
-      <CardHeader className="text-center">
-        {/* Game Progress */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-left">
-            <p className="text-gray-400">Problem {gameState.currentProblemIndex + 1}/10</p>
-            <p className="text-2xl font-bold text-white">
-              {isPlayer1 ? gameState.player1Score : gameState.player2Score} pts
-            </p>
+  // Show ready state if both players aren't ready yet
+  console.log('🔍 Ready state check:', { 
+    bothPlayersReady, 
+    gameState: !!gameState, 
+    currentProblem: !!currentProblem,
+    gameStateFinished: gameState?.player1Finished && gameState?.player2Finished
+  })
+  
+  
+  // Don't show game component ready state - let the match lobby handle it
+  // Just show loading until both players are ready
+  if (!gameState || !matchReady) {
+    console.log('🎯 Waiting for game to start, showing loading...', { 
+      hasGameState: !!gameState, 
+      matchReady,
+      bothPlayersReady 
+    })
+    return (
+      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <CardContent className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Waiting for game to start...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Check if both players are finished - show results
+  if (gameState.player1Finished && gameState.player2Finished) {
+    console.log('🏁 Both players finished, showing results')
+    console.log('🏁 GameResult status:', {
+      hasGameResult: !!gameResult,
+      gameResult: gameResult,
+      gameState: {
+        player1Finished: gameState.player1Finished,
+        player2Finished: gameState.player2Finished,
+        player1Answers: gameState.player1Answers.length,
+        player2Answers: gameState.player2Answers.length
+      }
+    })
+    console.log('🎯 RENDERING: Both players finished - showing results')
+    
+    // If no game result, try to calculate it
+    if (!gameResult) {
+      console.log('🔄 No game result found, calculating...')
+      try {
+      const result = calculateMultiplayerResult(gameState)
+      console.log('🎯 Calculated result:', result)
+      setGameResult(result)
+      } catch (error) {
+        console.error('❌ Failed to calculate result in results display:', error)
+        // Create a fallback result
+        const fallbackResult = {
+          player1Result: {
+            score: gameState.player1Score || 0,
+            problemsSolved: gameState.player1Answers.length,
+            accuracy: gameState.player1Answers.length > 0 ? 
+              gameState.player1Answers.filter(a => a.isCorrect).length / gameState.player1Answers.length : 0,
+            totalTime: gameState.player1Answers.reduce((sum, a) => sum + a.timeSpent, 0),
+            streak: 0
+          },
+          player2Result: {
+            score: gameState.player2Score || 0,
+            problemsSolved: gameState.player2Answers.length,
+            accuracy: gameState.player2Answers.length > 0 ? 
+              gameState.player2Answers.filter(a => a.isCorrect).length / gameState.player2Answers.length : 0,
+            totalTime: gameState.player2Answers.reduce((sum, a) => sum + a.timeSpent, 0),
+            streak: 0
+          },
+          winner: 'draw' as const,
+          winReason: 'score' as const
+        }
+        console.log('🔄 Using fallback result in results display:', fallbackResult)
+        setGameResult(fallbackResult)
+      }
+    }
+    
+    // Show results screen
+    if (gameResult) {
+      return (
+        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-bold text-white">Game Complete!</CardTitle>
+            <p className="text-gray-400">Final Results</p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 1</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player1Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player1Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player1Result.accuracy * 100)}% accuracy</p>
+                </div>
+              </div>
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 2</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player2Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player2Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player2Result.accuracy * 100)}% accuracy</p>
+                </div>
+              </div>
+            </div>
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {gameResult.winner === 'player1' ? 'Player 1 Wins!' : 
+                 gameResult.winner === 'player2' ? 'Player 2 Wins!' : 'Tie Game!'}
+              </h2>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    } else {
+      return (
+        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl font-bold text-white">Calculating Results...</CardTitle>
+            <p className="text-gray-400">Please wait while we calculate the final scores.</p>
+          </CardHeader>
+        </Card>
+      )
+    }
+  }
+  
+  // Check if one player finished but the other hasn't - show waiting screen
+  // Only show waiting screen if the current player has finished but opponent hasn't
+  const currentPlayerFinished = isPlayer1 ? gameState.player1Finished : gameState.player2Finished
+  const opponentFinished = isPlayer1 ? gameState.player2Finished : gameState.player1Finished
+  
+  if (currentPlayerFinished && !opponentFinished) {
+    console.log('🎉 Current player has finished, showing celebration screen')
+    console.log('🎯 RENDERING: Current player finished - showing celebration screen')
+    console.log('🎉 Celebration screen - Finished state details:', {
+      p1Finished: gameState.player1Finished,
+      p2Finished: gameState.player2Finished,
+      isPlayer1: isPlayer1,
+      currentPlayerFinished,
+      opponentFinished,
+      p1Answers: gameState.player1Answers.length,
+      p2Answers: gameState.player2Answers.length
+    })
+    
+    return (
+      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <CardContent className="text-center py-12">
+          <div className="text-6xl mb-4">🎉</div>
+          <p className="text-2xl font-bold text-green-400 mb-2">You've Finished!</p>
+          <p className="text-gray-400 mb-4">Great job! You've completed all 10 problems.</p>
+          <p className="text-sm text-gray-500">
+            Waiting for {isPlayer1 ? 'Player 2' : 'Player 1'} to finish their questions...
+          </p>
+          <div className="text-xs text-gray-600 mt-4">
+            Debug: P1 finished: {gameState.player1Finished ? 'Yes' : 'No'} ({gameState.player1Answers.length}/10), 
+            P2 finished: {gameState.player2Finished ? 'Yes' : 'No'} ({gameState.player2Answers.length}/10)
           </div>
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-white">Multiplayer Math Blitz</h1>
-            <p className="text-gray-400">Multiplication Challenge</p>
-          </div>
-          <div className="text-right">
+        </CardContent>
+      </Card>
+    )
+  }
+  
+  // Show main game if both players are ready and not both finished
+  if (bothPlayersReady && !(gameState.player1Finished && gameState.player2Finished)) {
+    console.log('🎮 Rendering main game:', {
+      bothPlayersReady,
+      hasCurrentProblem: !!currentProblem,
+      // isMyTurn, // Removed turn-based logic
+      localAnswerSubmitted,
+      currentProblemIndex: gameState.currentProblemIndex,
+      p1Finished: gameState.player1Finished,
+      p2Finished: gameState.player2Finished,
+      bothFinished: gameState.player1Finished && gameState.player2Finished
+    })
+    console.log('🎯 RENDERING: Main game - both players active')
+    
+    console.log('🎯 Showing main game screen')
+    return (
+      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <CardHeader className="text-center">
+          {/* Game Progress */}
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-left">
+              <p className="text-gray-400">Problem {gameState.currentProblemIndex + 1}/10</p>
+              <p className="text-2xl font-bold text-white">
+                {isPlayer1 ? gameState.player1Score : gameState.player2Score} pts
+              </p>
+            </div>
+            <div className="text-center">
+              <h1 className="text-3xl font-bold text-white">Multiplayer Math Blitz</h1>
+              <p className="text-gray-400">Multiplication Challenge</p>
+            </div>
+            <div className="text-right">
             <p className="text-gray-400">Opponent Progress</p>
             <p className="text-2xl font-bold text-orange-500">{opponentProgress}/10</p>
             <p className="text-sm text-gray-400 mt-1">
@@ -1114,18 +1801,26 @@ export default function MultiplayerMathBlitz({
         {/* Math Problem */}
         <div className="text-center">
           <h2 className="text-5xl font-bold text-white mb-8">{currentProblem.question}</h2>
-          {localAnswerSubmitted && (
-            <p className="text-green-400 text-lg mb-4">✓ Answer submitted! Moving to next question...</p>
-          )}
           
           {/* Answer Options */}
           <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
             {currentProblem.options.map((option, index) => (
               <Button
                 key={index}
-                onClick={() => handleAnswer(option)}
+                onClick={() => {
+                  console.log('🔘 Button clicked:', { 
+                    option, 
+                    // isMyTurn, // Removed turn-based logic 
+                    localAnswerSubmitted,
+                    hasGameState: !!gameState,
+                    hasCurrentProblem: !!currentProblem,
+                    playerId,
+                    currentProblemIndex: gameState?.currentProblemIndex
+                  })
+                  handleAnswer(option)
+                }}
                 className="h-16 text-xl font-bold bg-gray-800 hover:bg-gray-700 border-gray-700 text-white"
-                disabled={!isMyTurn || localAnswerSubmitted}
+                disabled={localAnswerSubmitted}
               >
                 {option}
               </Button>
@@ -1170,6 +1865,28 @@ export default function MultiplayerMathBlitz({
             <span>Opponent Progress: {opponentProgress}/10 problems</span>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  )
+  }
+  
+  // Fallback: if none of the above conditions are met, show loading
+  console.log('🎯 RENDERING: Fallback - preparing game')
+  console.log('🎯 Fallback state:', {
+    bothPlayersReady,
+    hasGameState: !!gameState,
+    hasCurrentProblem: !!currentProblem,
+    p1Finished: gameState?.player1Finished,
+    p2Finished: gameState?.player2Finished,
+    currentProblemIndex: gameState?.currentProblemIndex,
+    totalProblems: gameState?.problems?.length,
+    matchReady
+  })
+  return (
+    <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <CardContent className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+        <p className="text-gray-400">Preparing game...</p>
       </CardContent>
     </Card>
   )

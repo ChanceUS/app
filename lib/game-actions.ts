@@ -167,6 +167,22 @@ export async function joinMatch(matchId: string) {
       throw new Error("Failed to join match")
     }
 
+    // Mark any waiting matchmaking queues for player2 as matched
+    await supabase
+      .from("matchmaking_queue")
+      .update({ status: "matched" })
+      .eq("user_id", user.id)
+      .eq("status", "waiting")
+    
+    // Also mark player1's queues as matched if they have any
+    if (matchData.player1_id) {
+      await supabase
+        .from("matchmaking_queue")
+        .update({ status: "matched" })
+        .eq("user_id", matchData.player1_id)
+        .eq("status", "waiting")
+    }
+
     // Create bet transaction for player 2
     const { error: transactionError } = await supabase.from("transactions").insert({
       user_id: user.id,
@@ -211,14 +227,14 @@ export async function cancelMatch(matchId: string) {
       throw new Error("User not authenticated")
     }
 
-    // Get match details
-    console.log("🚫 Looking for match with ID:", matchId, "and player1_id:", user.id)
+    // Get match details - user can be either player1 or player2
+    console.log("🚫 Looking for match with ID:", matchId, "and user:", user.id)
     const { data: matchData, error: matchError } = await supabase
       .from("matches")
       .select("*")
       .eq("id", matchId)
-      .eq("player1_id", user.id)
-      .in("status", ["waiting", "in_progress"])
+      .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+      .in("status", ["waiting", "in_progress", "completed", "cancelled"])
       .single()
 
     console.log("🚫 Match query result:", { matchData, matchError })
@@ -226,6 +242,12 @@ export async function cancelMatch(matchId: string) {
     if (!matchData) {
       console.log("🚫 Match not found or cannot be cancelled")
       throw new Error("Match not found or cannot be cancelled")
+    }
+
+    // If match is already cancelled, just return success
+    if (matchData.status === "cancelled") {
+      console.log("🚫 Match is already cancelled")
+      return { success: true, message: "Match is already cancelled" }
     }
 
     // Update match status to cancelled

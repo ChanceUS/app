@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Poppins, Open_Sans, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import ClientInit from "./client-init"
+import { Toaster } from "@/components/ui/toaster"
 
 // Fonts
 const poppins = Poppins({
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased" suppressHydrationWarning>
         <ClientInit /> {/* ensures window.supabase is set */}
         {children}
+        <Toaster />
       </body>
     </html>
   )

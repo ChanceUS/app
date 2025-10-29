@@ -15,6 +15,7 @@ interface GamePlayPageProps {
 }
 
 export default async function GamePlayPage({ params }: GamePlayPageProps) {
+  const resolvedParams = await params
   if (!isSupabaseConfigured) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
@@ -43,7 +44,7 @@ export default async function GamePlayPage({ params }: GamePlayPageProps) {
   const { data: game } = await supabase
     .from("games")
     .select("*")
-    .eq("id", params.gameId)
+    .eq("id", resolvedParams.gameId)
     .eq("is_active", true)
     .single()
 
@@ -56,7 +57,7 @@ export default async function GamePlayPage({ params }: GamePlayPageProps) {
       case "math blitz":
         return <MathBlitz />
       case "4 in a row":
-      case "connect 4":
+      case "four in a row":
         return (
           <ConnectFour
             onGameEnd={(winner) => console.log("Game ended:", winner)}
@@ -85,7 +86,7 @@ export default async function GamePlayPage({ params }: GamePlayPageProps) {
         {/* Navigation */}
         <div className="mb-6">
           <Button asChild variant="outline" className="border-gray-700 text-gray-300 hover:text-white bg-transparent">
-            <Link href={`/games/${params.gameId}`}>
+            <Link href={`/games/${resolvedParams.gameId}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to {game.name} Lobby
             </Link>
@@ -111,12 +112,12 @@ export default async function GamePlayPage({ params }: GamePlayPageProps) {
         <div className="mt-8 text-center">
           <div className="space-x-4">
             <Button asChild className="bg-orange-500 hover:bg-orange-600 text-black font-semibold">
-              <Link href={`/games/${params.gameId}/create?tier=free`}>
+              <Link href={`/games/${resolvedParams.gameId}/create?tier=free`}>
                 Play for Real
               </Link>
             </Button>
             <Button asChild variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-800">
-              <Link href={`/games/${params.gameId}`}>
+              <Link href={`/games/${resolvedParams.gameId}`}>
                 Back to Lobby
               </Link>
             </Button>

@@ -29,7 +29,7 @@ export default function ConnectFour({
 
   // Debug props (only log when props change)
   useEffect(() => {
-    console.log('🎮 Connect 4 component props:', {
+    console.log('🎮 Four in a Row component props:', {
       isActive,
       currentPlayer,
       isMyTurn,
@@ -57,7 +57,7 @@ export default function ConnectFour({
   }, [board, gameWinner, onGameEnd])
 
   const handleColumnClick = useCallback((column: number) => {
-    console.log('🎯 Connect 4 column click:', {
+    console.log('🎯 Four in a Row column click:', {
       column,
       isActive,
       isMyTurn,
@@ -66,7 +66,7 @@ export default function ConnectFour({
     })
     
     if (!isActive || !isMyTurn || gameWinner) {
-      console.log('❌ Connect 4 click blocked:', {
+      console.log('❌ Four in a Row click blocked:', {
         isActive,
         isMyTurn,
         gameWinner

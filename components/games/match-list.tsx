@@ -31,6 +31,12 @@ interface MatchListProps {
   description: string
 }
 
+// Function to override game names
+const getDisplayName = (gameName: string) => {
+  if (gameName === "Connect 4") return "Four in a Row"
+  return gameName
+}
+
 export default function MatchList({ matches, currentUserId, title, description }: MatchListProps) {
   const router = useRouter()
   const [joiningMatch, setJoiningMatch] = useState<string | null>(null)
@@ -116,7 +122,7 @@ export default function MatchList({ matches, currentUserId, title, description }
                   </Avatar>
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-white font-medium">{match.games.name}</span>
+                      <span className="text-white font-medium">{getDisplayName(match.games.name)}</span>
                       <Badge className="bg-yellow-500/20 text-yellow-400">{match.bet_amount} tokens</Badge>
                     </div>
                     <div className="text-sm text-gray-400 flex items-center">

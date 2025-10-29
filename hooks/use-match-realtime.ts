@@ -103,9 +103,15 @@ export function useMatchRealtime({
           action_data: actionData
         })
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Failed to add match history:', error)
+        // Don't set error state for match history failures - they're not critical
+        throw error
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add match history')
+      console.error('❌ Match history error:', err)
+      // Don't set error state for match history failures - they're not critical
+      throw err
     }
   }, [matchId])
 

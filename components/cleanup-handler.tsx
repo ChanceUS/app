@@ -14,9 +14,9 @@ export default function CleanupHandler() {
       }
     }
 
-    // Run cleanup immediately and then every 30 seconds
+    // Run cleanup immediately and then every 10 seconds
     runCleanup() // Run immediately
-    const interval = setInterval(runCleanup, 30000) // Every 30 seconds
+    const interval = setInterval(runCleanup, 10000) // Every 10 seconds
     
     return () => clearInterval(interval)
   }, [])

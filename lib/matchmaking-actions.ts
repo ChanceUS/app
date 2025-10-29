@@ -180,6 +180,13 @@ export async function joinMatchmakingQueue(
         .from("matchmaking_queue")
         .update({ status: "matched" })
         .eq("id", existingQueue.id)
+      
+      // Also mark the current user's queue entry as matched
+      await supabase
+        .from("matchmaking_queue")
+        .update({ status: "matched" })
+        .eq("user_id", user.id)
+        .eq("status", "waiting")
 
       // Deduct tokens for both players if not free
       if (matchType !== 'free') {

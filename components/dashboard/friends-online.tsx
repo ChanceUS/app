@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { ChevronDown, Users, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,26 +24,50 @@ export default function FriendsOnline() {
   const [friends, setFriends] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     const fetchFriends = async () => {
       try {
-        // For now, get all users as "friends" (you can implement proper friend system later)
-        const { data: allUsers, error } = await supabase
-          .from('users')
-          .select('id, display_name, username, is_online, last_seen')
-          .limit(10) // Limit to 10 friends for dropdown
+        // Get current user first
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        
+        if (!currentUser) {
+          setFriends([])
+          setLoading(false)
+          return
+        }
+
+        // Fetch actual friends from friends table
+        const { data: friendsData, error } = await supabase
+          .from('friends')
+          .select(`
+            id,
+            user_id,
+            friend_id,
+            status,
+            user:users!friends_user_id_fkey(id, display_name, username, is_online, last_seen),
+            friend:users!friends_friend_id_fkey(id, display_name, username, is_online, last_seen)
+          `)
+          .eq('status', 'accepted')
+          .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`)
 
         if (error) {
           console.error('Error fetching friends:', error)
-          // Fallback: create some mock friends
-          setFriends([
-            { id: '1', display_name: 'Alex', username: 'alex_gamer', is_online: true, last_seen: new Date().toISOString() },
-            { id: '2', display_name: 'Sarah', username: 'sarah_plays', is_online: true, last_seen: new Date().toISOString() },
-            { id: '3', display_name: 'Mike', username: 'mike_wins', is_online: false, last_seen: new Date(Date.now() - 300000).toISOString() },
-          ])
+          setFriends([])
         } else {
-          setFriends(allUsers || [])
+          // Map friends data to extract the other user's info
+          const mappedFriends = (friendsData || []).map((friendship: any) => {
+            const otherUser = friendship.user_id === currentUser.id ? friendship.friend : friendship.user
+            return {
+              id: otherUser.id,
+              display_name: otherUser.display_name || otherUser.username,
+              username: otherUser.username,
+              is_online: otherUser.is_online || false,
+              last_seen: otherUser.last_seen || new Date().toISOString()
+            }
+          })
+          setFriends(mappedFriends)
         }
       } catch (error) {
         console.error('Error fetching friends:', error)
@@ -53,6 +78,11 @@ export default function FriendsOnline() {
     }
 
     fetchFriends()
+    
+    // Refresh friends list periodically
+    const interval = setInterval(fetchFriends, 30000) // Every 30 seconds
+    
+    return () => clearInterval(interval)
   }, [])
 
   const onlineFriends = friends.filter(friend => friend.is_online)

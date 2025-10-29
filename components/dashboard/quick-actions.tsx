@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Calculator, Grid3X3, Brain, Trophy, Users, Zap } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 
 const games = [
   {
@@ -12,26 +13,29 @@ const games = [
     name: "Math Blitz",
     description: "Lightning-fast arithmetic challenges",
     icon: Calculator,
+    thumbnail: "/math-blitz.JPG",
     color: "from-cyan-500 to-cyan-600",
     hoverColor: "from-cyan-600 to-cyan-700",
     minBet: 10,
     maxBet: 500,
   },
   {
-    id: "69bf26d2-110b-40d9-b20a-d5cfab14d133", // Actual 4 In a Row game ID
-    name: "4 In a Row",
+    id: "69bf26d2-110b-40d9-b20a-d5cfab14d133", // Actual Four in a Row game ID
+    name: "Four in a Row",
     description: "Strategic four-in-a-row battles",
     icon: Grid3X3,
+    thumbnail: "/4-in-a-row.JPG",
     color: "from-yellow-500 to-yellow-600",
     hoverColor: "from-yellow-600 to-yellow-700",
     minBet: 25,
     maxBet: 1000,
   },
   {
-    id: "trivia", // Placeholder - replace with actual Trivia game ID
+    id: "e03ee060-b913-4795-9149-54660e2e2eac", // Trivia Challenge game ID
     name: "Trivia Challenge",
     description: "Test your knowledge across categories",
     icon: Brain,
+    thumbnail: "/trivia-blitz.JPG",
     color: "from-purple-500 to-purple-600",
     hoverColor: "from-purple-600 to-purple-700",
     minBet: 15,
@@ -65,10 +69,14 @@ export default function QuickActions() {
           <Card key={game.id} className="bg-gray-900/50 border-gray-800 card-hover group">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
-                <div
-                  className={`p-4 bg-gradient-to-br ${game.color} rounded-full group-hover:scale-110 transition-transform duration-300`}
-                >
-                  <game.icon className="h-8 w-8 text-black" />
+                <div className="relative w-20 h-20 rounded-lg overflow-hidden group-hover:scale-110 transition-transform duration-300">
+                  <Image
+                    src={game.thumbnail}
+                    alt={game.name}
+                    fill
+                    className="object-cover"
+                    sizes="80px"
+                  />
                 </div>
               </div>
               <CardTitle className="text-white text-xl">{game.name}</CardTitle>

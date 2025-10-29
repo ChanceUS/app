@@ -28,11 +28,11 @@ export default function RealTimeHandler({ userId }: RealTimeHandlerProps) {
 
         const { data: activeMatches, error } = await supabase
           .from('matches')
-          .select('id, status, player1_id, player2_id, created_at')
+          .select('id, status, player1_id, player2_id, created_at, game_id')
           .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
           .in('status', ['waiting', 'in_progress'])
           .order('created_at', { ascending: false })
-          .limit(1)
+          .limit(5) // Get more matches to find the most recent one
 
         if (error) {
           console.error("❌ Error checking for active matches:", error)
@@ -40,33 +40,41 @@ export default function RealTimeHandler({ userId }: RealTimeHandlerProps) {
         }
 
         if (activeMatches && activeMatches.length > 0) {
-          const match = activeMatches[0]
-          console.log("🔍 Found active match:", match)
+          console.log("🔍 Found active matches:", activeMatches.map(m => ({ id: m.id, status: m.status, created: m.created_at, game_id: m.game_id })))
           
-          // Only redirect if this is a VERY NEW match (created in the last 10 seconds) that we haven't seen before
-          const matchCreatedAt = new Date(match.created_at)
-          const tenSecondsAgo = new Date(Date.now() - 10 * 1000)
-          const isVeryRecentMatch = matchCreatedAt > tenSecondsAgo
+          // Find the most recent match that's either waiting or in_progress
+          const mostRecentMatch = activeMatches.find(match => 
+            match.status === 'waiting' || match.status === 'in_progress'
+          )
           
-          // Also redirect if match status JUST changed to in_progress (someone just joined)
-          const isMatchInProgress = match.status === 'in_progress'
-          const isNewInProgress = isMatchInProgress && lastCheckedMatch.current !== match.id
-          
-          if (isVeryRecentMatch && !hasRedirected.current) {
-            console.log("🎮 VERY NEW match detected! Redirecting to:", match.id, "Status:", match.status)
-            lastCheckedMatch.current = match.id
-            hasRedirected.current = true
-            router.push(`/games/match/${match.id}`)
-            return true // Found and redirected
-          } else if (isNewInProgress && !hasRedirected.current) {
-            console.log("🎮 Match just started! Redirecting to:", match.id)
-            lastCheckedMatch.current = match.id
-            hasRedirected.current = true
-            router.push(`/games/match/${match.id}`)
-            return true // Found and redirected
-          } else {
-            console.log("🔍 Found existing match, not redirecting:", match.id, "Status:", match.status)
-            lastCheckedMatch.current = match.id
+          if (mostRecentMatch) {
+            console.log("🎯 Most recent active match:", mostRecentMatch)
+            
+            // Only redirect if this is a VERY NEW match (created in the last 10 seconds) that we haven't seen before
+            const matchCreatedAt = new Date(mostRecentMatch.created_at)
+            const tenSecondsAgo = new Date(Date.now() - 10 * 1000)
+            const isVeryRecentMatch = matchCreatedAt > tenSecondsAgo
+            
+            // Also redirect if match status JUST changed to in_progress (someone just joined)
+            const isMatchInProgress = mostRecentMatch.status === 'in_progress'
+            const isNewInProgress = isMatchInProgress && lastCheckedMatch.current !== mostRecentMatch.id
+            
+            if (isVeryRecentMatch && !hasRedirected.current) {
+              console.log("🎮 VERY NEW match detected! Redirecting to:", mostRecentMatch.id, "Status:", mostRecentMatch.status, "Game ID:", mostRecentMatch.game_id)
+              lastCheckedMatch.current = mostRecentMatch.id
+              hasRedirected.current = true
+              router.push(`/games/match/${mostRecentMatch.id}`)
+              return true // Found and redirected
+            } else if (isNewInProgress && !hasRedirected.current) {
+              console.log("🎮 Match just started! Redirecting to:", mostRecentMatch.id, "Game ID:", mostRecentMatch.game_id)
+              lastCheckedMatch.current = mostRecentMatch.id
+              hasRedirected.current = true
+              router.push(`/games/match/${mostRecentMatch.id}`)
+              return true // Found and redirected
+            } else {
+              console.log("🔍 Found existing match, not redirecting:", mostRecentMatch.id, "Status:", mostRecentMatch.status, "Game ID:", mostRecentMatch.game_id)
+              lastCheckedMatch.current = mostRecentMatch.id
+            }
           }
         } else {
           // Reset the last checked match if no active matches

@@ -37,7 +37,7 @@ export default function WinningList() {
             display_name: 'ConnectPro',
             amount: 180,
             won_at: new Date(Date.now() - 30000).toISOString(), // 30 seconds ago
-            game_name: 'Connect 4'
+            game_name: 'Four in a Row'
           },
           {
             id: '3',

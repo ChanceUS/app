@@ -77,15 +77,14 @@ export async function cleanupExpiredMatches() {
       }
     }
 
-    // Clean up very old waiting matches (older than 1 hour)
-    const oneHourAgoForMatches = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    // Clean up very old waiting matches (older than 2 minutes)
+    const twoMinutesAgoForMatches = new Date(Date.now() - 2 * 60 * 1000).toISOString()
     
     const { data: oldMatches, error: oldMatchesError } = await supabase
       .from("matches")
       .select("*")
-      .eq("status", "waiting")
-      .is("player2_id", null)
-      .lt("created_at", oneHourAgoForMatches)
+      .in("status", ["waiting", "in_progress"])
+      .lt("created_at", twoMinutesAgoForMatches)
 
     if (oldMatchesError) {
       console.error("Error fetching old matches:", oldMatchesError)
@@ -120,10 +119,13 @@ export async function cleanupExpiredMatches() {
           })
         }
 
-        // Update match status to cancelled
+        // Update match status to cancelled and set completion time
         await supabase
           .from("matches")
-          .update({ status: "cancelled" })
+          .update({ 
+            status: "cancelled",
+            completed_at: new Date().toISOString()
+          })
           .eq("id", match.id)
       }
     }

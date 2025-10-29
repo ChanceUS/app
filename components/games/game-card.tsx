@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Users, Zap, Trophy } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import type { Game } from "@/lib/supabase/client"
 
 interface GameCardProps {
@@ -13,9 +14,16 @@ interface GameCardProps {
 
 const gameIcons = {
   "Math Blitz": "🧮",
-  "Connect 4": "🎮",
+  "Four in a Row": "🎮",
   "4 In a Row": "🔴",
   "Trivia Challenge": "🧠",
+}
+
+const gameThumbnails = {
+  "Math Blitz": "/math-blitz.JPG",
+  "Four in a Row": "/4-in-a-row.JPG",
+  "4 In a Row": "/4-in-a-row.JPG",
+  "Trivia Challenge": "/trivia-blitz.JPG",
 }
 
 const gameColors = {
@@ -24,7 +32,7 @@ const gameColors = {
     hoverGradient: "from-blue-600 to-blue-700",
     border: "border-blue-500/20",
   },
-  "Connect 4": {
+  "Four in a Row": {
     gradient: "from-red-500 to-red-600",
     hoverGradient: "from-red-600 to-red-700",
     border: "border-red-500/20",
@@ -41,18 +49,36 @@ const gameColors = {
   },
 }
 
+// Function to override game names
+const getDisplayName = (gameName: string) => {
+  if (gameName === "Connect 4") return "Four in a Row"
+  return gameName
+}
+
 export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: GameCardProps) {
   const colors = gameColors[game.name as keyof typeof gameColors] || gameColors["Math Blitz"]
+  const displayName = getDisplayName(game.name)
   
-  console.log("🎮 GameCard rendering for:", { id: game.id, name: game.name })
+  // Get thumbnail using display name instead of original name
+  const thumbnailSrc = gameThumbnails[displayName as keyof typeof gameThumbnails] || "/placeholder.jpg"
+  
+  console.log("🎮 GameCard rendering for:", { id: game.id, name: game.name, displayName, thumbnailSrc })
 
   return (
     <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors mx-1 sm:mx-0">
       <CardHeader className="text-center pb-3 sm:pb-4">
         <div className="flex justify-center mb-3 sm:mb-4">
-          <div className="text-4xl sm:text-5xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden">
+            <Image
+              src={thumbnailSrc}
+              alt={displayName}
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 64px, 80px"
+            />
+          </div>
         </div>
-        <CardTitle className="text-white text-lg sm:text-xl mb-2">{game.name}</CardTitle>
+        <CardTitle className="text-white text-lg sm:text-xl mb-2">{displayName}</CardTitle>
         <CardDescription className="text-gray-400 text-xs sm:text-sm">{game.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

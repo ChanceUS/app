@@ -13,7 +13,7 @@ async function fixGameNames() {
   
   const { data, error } = await supabase
     .from('games')
-    .update({ name: '4 In a Row' })
+    .update({ name: 'Four in a Row' })
     .eq('id', connect4Id)
     .select()
   

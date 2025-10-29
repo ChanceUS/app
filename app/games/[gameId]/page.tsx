@@ -14,7 +14,14 @@ interface GameLobbyPageProps {
   }
 }
 
+// Function to override game names
+const getDisplayName = (gameName: string) => {
+  if (gameName === "Connect 4") return "Four in a Row"
+  return gameName
+}
+
 export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
+  const resolvedParams = await params
   if (!isSupabaseConfigured) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
@@ -43,7 +50,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
   const { data: game } = await supabase
     .from("games")
     .select("*")
-    .eq("id", params.gameId)
+    .eq("id", resolvedParams.gameId)
     .eq("is_active", true)
     .single()
 
@@ -65,7 +72,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
       users!matchmaking_queue_user_id_fkey (username, display_name, avatar_url)
     `,
     )
-    .eq("game_id", params.gameId)
+    .eq("game_id", resolvedParams.gameId)
     .eq("status", "waiting")
     .neq("user_id", authUser.id) // Don't show user's own queue entries
     .gt("expires_at", new Date().toISOString()) // Only show non-expired entries
@@ -83,7 +90,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
       player1:users!matches_player1_id_fkey (username, display_name, avatar_url)
     `,
     )
-    .eq("game_id", params.gameId)
+    .eq("game_id", resolvedParams.gameId)
     .eq("status", "waiting")
     .is("player2_id", null)
     .neq("player1_id", authUser.id)
@@ -122,7 +129,7 @@ export default async function GameLobbyPage({ params }: GameLobbyPageProps) {
           <div className="flex items-center space-x-4 mb-4">
             <div className="text-6xl">{gameIcons[game.name as keyof typeof gameIcons] || "🎮"}</div>
             <div>
-              <h1 className="text-4xl font-bold text-white">{game.name} Lobby</h1>
+              <h1 className="text-4xl font-bold text-white">{getDisplayName(game.name)} Lobby</h1>
               <p className="text-gray-400 text-lg">{game.description}</p>
             </div>
           </div>

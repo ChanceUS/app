@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 
 interface SimpleConnectFourProps {
   matchId: string
@@ -13,6 +14,7 @@ interface SimpleConnectFourProps {
 }
 
 export default function SimpleConnectFour({ matchId, betAmount, status, currentUserId, player1Id, player2Id }: SimpleConnectFourProps) {
+  const router = useRouter()
   const [board, setBoard] = useState(Array(42).fill(null))
   const [currentStatus, setCurrentStatus] = useState<string>(status)
   const [isLoading, setIsLoading] = useState(false)
@@ -25,6 +27,57 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [viewingHistory, setViewingHistory] = useState(false)
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1)
   const [historyReconstructed, setHistoryReconstructed] = useState(false)
+
+  // Rematch request state
+  const [rematchRequested, setRematchRequested] = useState(false)
+  const [rematchRequestedBy, setRematchRequestedBy] = useState<string | null>(null)
+  const [rematchStatus, setRematchStatus] = useState<'none' | 'requested' | 'received' | 'accepted' | 'rejected'>('none')
+  const [isLoadingRematch, setIsLoadingRematch] = useState(false)
+
+  // Function to load move history from database
+  const loadMoveHistoryFromDB = async () => {
+    try {
+      const supabase = createClient()
+      const { data: historyData, error } = await supabase
+        .from('match_history')
+        .select('*')
+        .eq('match_id', matchId)
+        .eq('action_type', 'move_made')
+        .order('timestamp', { ascending: true })
+
+      if (error) {
+        console.error('Error loading move history:', error)
+        return
+      }
+
+      if (historyData && historyData.length > 0) {
+        console.log('📝 Loading move history from database:', historyData.length, 'moves')
+        
+        // Convert match history to move history format
+        const moveHistoryFromDB = historyData.map((entry, index) => {
+          const moveData = entry.action_data
+          const playerId = entry.user_id
+          const player = playerId === player1Id ? 'player1' : 'player2'
+          
+          return {
+            board: moveData.board || [],
+            move: moveData.column || moveData.move || 0,
+            player: player,
+            moveNumber: index + 1
+          }
+        })
+        
+        setMoveHistory(moveHistoryFromDB)
+        setHistoryReconstructed(true)
+      } else {
+        // No move history found, start with empty
+        setMoveHistory([])
+        setHistoryReconstructed(true)
+      }
+    } catch (error) {
+      console.error('Error loading move history:', error)
+    }
+  }
   
   // Move timer state
   const [moveTimeLeft, setMoveTimeLeft] = useState(10)
@@ -49,13 +102,22 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
 
   // Start timer when it's a player's turn
   useEffect(() => {
-    if (currentStatus === 'in_progress' && !winner && !viewingHistory) {
+    if (currentStatus === 'in_progress' && !winner) {
+      // Only reset timer when it's a new turn (currentPlayer changes), not when viewing history
       setMoveTimeLeft(10)
       setIsMoveTimerActive(true)
     } else {
       setIsMoveTimerActive(false)
     }
-  }, [currentPlayer, currentStatus, winner, viewingHistory])
+  }, [currentPlayer, currentStatus, winner]) // Removed viewingHistory from dependencies
+
+  // Load move history when board changes (for opponent moves)
+  useEffect(() => {
+    if (board && historyReconstructed) {
+      // Reload move history from database when board changes
+      loadMoveHistoryFromDB()
+    }
+  }, [board, historyReconstructed])
   
 
   // Load game state from database and check for updates
@@ -78,6 +140,134 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               player1: player1Data?.display_name || player1Data?.username || 'Player 1',
               player2: player2Data?.display_name || player2Data?.username || 'Player 2'
             })
+          }
+        }
+
+        // Check for rematch requests
+        if (currentStatus === 'completed' && currentUserId) {
+          console.log('🔍 Checking for rematch requests...', { currentStatus, currentUserId, matchId })
+          // First, check if there are any new matches created recently that might be rematches
+          const { data: recentMatches } = await supabase
+            .from('matches')
+            .select('id, created_at, player1_id, player2_id, status')
+            .or(`player1_id.eq.${currentUserId},player2_id.eq.${currentUserId}`)
+            .in('status', ['waiting', 'in_progress'])
+            .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString()) // Last 5 minutes
+            .order('created_at', { ascending: false })
+            .limit(5)
+          
+          if (recentMatches && recentMatches.length > 0) {
+            console.log('🔍 Found recent matches that might be rematches:', recentMatches)
+            // If we find a very recent match, redirect to it
+            const mostRecentMatch = recentMatches[0]
+            const matchAge = Date.now() - new Date(mostRecentMatch.created_at).getTime()
+            if (matchAge < 30000) { // Less than 30 seconds old
+              console.log('🔄 Found very recent match, redirecting to:', mostRecentMatch.id)
+              window.location.href = `/games/match/${mostRecentMatch.id}`
+              return
+            }
+          }
+          const { data: rematchHistory, error: rematchError } = await supabase
+            .from('match_history')
+            .select('*')
+            .eq('match_id', matchId)
+            .in('action_type', ['rematch_requested', 'rematch_accepted', 'rematch_rejected'])
+            .order('created_at', { ascending: false })
+          
+          // Log the specific error if there is one
+          if (rematchError) {
+            console.error('🔍 Rematch history query failed:', rematchError)
+          }
+          
+          console.log('🔍 Rematch history query result:', { rematchHistory, matchId, hasError: !!rematchError })
+          
+          // Also check matches table for rematch requests stored in game_data
+          const { data: matchData, error: matchDataError } = await supabase
+            .from('matches')
+            .select('game_data')
+            .eq('id', matchId)
+            .single()
+          
+          console.log('🔍 Match data check:', { matchData, matchDataError })
+          
+          let rematchRequestedBy = null
+          let rematchRequestedAt = null
+          
+          // Check matches table FIRST (more reliable than match_history)
+          if (!matchDataError && matchData && matchData.game_data) {
+            const gameData = matchData.game_data
+            console.log('🔍 Checking game_data for rematch request:', gameData)
+            if (gameData.rematch_requested_by) {
+              rematchRequestedBy = gameData.rematch_requested_by
+              rematchRequestedAt = gameData.rematch_requested_at
+              console.log('🔍 Found rematch request in matches table:', { rematchRequestedBy, rematchRequestedAt })
+            } else {
+              console.log('🔍 No rematch_requested_by found in game_data')
+            }
+          } else {
+            console.log('🔍 No match data or game_data found:', { matchDataError, matchData })
+          }
+          
+          // Also check match_history as backup
+          if (!rematchRequestedBy && !rematchError && rematchHistory && rematchHistory.length > 0) {
+            console.log('🔍 Found rematch history as backup:', rematchHistory)
+            const latestRematchAction = rematchHistory[0]
+            console.log('🔍 Latest rematch action:', latestRematchAction)
+            
+            if (latestRematchAction.action_type === 'rematch_requested') {
+              const requestedBy = latestRematchAction.user_id
+              console.log('🔍 Rematch request analysis from history:', {
+                requestedBy,
+                currentUserId,
+                isDifferentUser: requestedBy !== currentUserId
+              })
+              
+              if (requestedBy !== currentUserId) {
+                // Someone else requested a rematch
+                console.log('🔍 Setting status to received (opponent requested)')
+                setRematchStatus('received')
+                setRematchRequestedBy(requestedBy)
+              } else {
+                // Current user requested a rematch
+                console.log('🔍 Setting status to requested (current user requested)')
+                setRematchStatus('requested')
+                setRematchRequestedBy(currentUserId)
+              }
+            } else if (latestRematchAction.action_type === 'rematch_accepted') {
+              setRematchStatus('accepted')
+              // Check if there's a new match ID in the action data
+              const actionData = latestRematchAction.action_data
+              if (actionData && actionData.new_match_id) {
+                console.log('🔄 Found new match ID in rematch acceptance:', actionData.new_match_id)
+                // Redirect to the new match
+                setTimeout(() => {
+                  window.location.href = `/games/match/${actionData.new_match_id}`
+                }, 2000)
+              }
+            } else if (latestRematchAction.action_type === 'rematch_rejected') {
+              setRematchStatus('rejected')
+            }
+          } else if (!rematchRequestedBy) {
+            console.log('🔍 No rematch history found either')
+          }
+          
+          // Process rematch request if found (either from match_history or matches table)
+          if (rematchRequestedBy) {
+            console.log('🔍 Processing rematch request:', { rematchRequestedBy, currentUserId })
+            
+            if (rematchRequestedBy !== currentUserId) {
+              // Someone else requested a rematch
+              console.log('🔍 Setting status to received (opponent requested)')
+              setRematchStatus('received')
+              setRematchRequestedBy(rematchRequestedBy)
+            } else {
+              // Current user requested a rematch
+              console.log('🔍 Setting status to requested (current user requested)')
+              setRematchStatus('requested')
+              setRematchRequestedBy(currentUserId)
+            }
+          } else {
+            console.log('🔍 No rematch request found anywhere')
           }
         }
         
@@ -108,11 +298,10 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               console.log('🔄 Updating board from database:', gameData.board)
               setBoard(gameData.board)
               
-              // Initialize move history as empty - let new moves be added properly
-              if (gameData.board && moveHistory.length === 0 && !historyReconstructed) {
-                console.log('🔄 Initializing empty move history')
-                setMoveHistory([])
-                setHistoryReconstructed(true)
+              // Load move history from database instead of reconstructing
+              if (gameData.board && !historyReconstructed) {
+                console.log('🔄 Loading move history from database')
+                loadMoveHistoryFromDB()
               }
             }
             
@@ -255,6 +444,30 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           }
           
           console.log('✅ Move saved to database for opponent sync')
+          
+          // Also save to match history for move tracking
+          const { error: historyError } = await supabase
+            .from('match_history')
+            .insert({
+              match_id: matchId,
+              user_id: currentUserId,
+              action_type: 'move_made',
+              action_data: {
+                board: newBoard,
+                column: column,
+                player: currentPlayer,
+                move: column,
+                timestamp: new Date().toISOString()
+              }
+            })
+          
+          if (historyError) {
+            console.error('Failed to save move to history:', historyError)
+          } else {
+            console.log('✅ Move saved to match history')
+            // Reload move history to include the new move
+            loadMoveHistoryFromDB()
+          }
         } catch (error) {
           console.error('Error saving move:', error)
           // Revert local change if database save failed
@@ -357,6 +570,250 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     setWinner(null)
   }
 
+  // Rematch request functions
+  const requestRematch = async () => {
+    if (!currentUserId || !player1Id || !player2Id) return
+    
+    console.log('🎯 requestRematch called by:', currentUserId)
+    console.log('🎯 Players:', { player1Id, player2Id })
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      // Check if there's already a rematch request for this match
+      const { data: existingRequest } = await supabase
+        .from('match_history')
+        .select('*')
+        .eq('match_id', matchId)
+        .eq('action_type', 'rematch_requested')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (existingRequest) {
+        console.log('⚠️ Rematch request already exists:', existingRequest)
+        alert('A rematch request has already been sent for this match.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Store rematch request directly in matches table (more reliable than match_history)
+      console.log('🎯 Storing rematch request in matches table:', {
+        match_id: matchId,
+        user_id: currentUserId
+      })
+      
+      // Get current game data first
+      const { data: currentMatchData } = await supabase
+        .from('matches')
+        .select('game_data')
+        .eq('id', matchId)
+        .single()
+      
+      const currentGameData = currentMatchData?.game_data || {}
+      
+      const { error: matchError } = await supabase
+        .from('matches')
+        .update({
+          game_data: {
+            ...currentGameData,
+            rematch_requested_by: currentUserId,
+            rematch_requested_at: new Date().toISOString()
+          }
+        })
+        .eq('id', matchId)
+      
+      if (matchError) {
+        console.error('❌ Error storing rematch request:', matchError)
+        alert('Failed to request rematch. Please try again.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      console.log('✅ Rematch request stored in matches table successfully')
+      
+      // Also try to store in match_history as backup (but don't fail if it doesn't work)
+      try {
+        const { error: historyError } = await supabase
+          .from('match_history')
+          .insert({
+            match_id: matchId,
+            user_id: currentUserId,
+            action_type: 'rematch_requested',
+            action_data: {
+              requested_by: currentUserId,
+              requested_at: new Date().toISOString(),
+              original_match_id: matchId
+            }
+          })
+        
+        if (historyError) {
+          console.log('⚠️ Could not store in match_history (non-critical):', historyError)
+        } else {
+          console.log('✅ Also stored in match_history as backup')
+        }
+      } catch (historyError) {
+        console.log('⚠️ Could not store in match_history (non-critical):', historyError)
+      }
+      
+      setRematchRequested(true)
+      setRematchRequestedBy(currentUserId)
+      setRematchStatus('requested')
+      console.log('✅ Rematch request sent')
+    } catch (error) {
+      console.error('Error requesting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const acceptRematch = async () => {
+    console.log('🎯 acceptRematch called!')
+    console.log('🎯 Current state:', { currentUserId, player1Id, player2Id, betAmount })
+    
+    if (!currentUserId || !player1Id || !player2Id) {
+      console.error('❌ Missing required IDs for rematch:', {
+        currentUserId,
+        player1Id,
+        player2Id
+      })
+      alert('Missing player information. Cannot create rematch.')
+      return
+    }
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      console.log('🔄 Creating rematch with data:', {
+        currentUserId,
+        player1Id,
+        player2Id,
+        betAmount,
+        gameId: '69bf26d2-110b-40d9-b20a-d5cfab14d133'
+      })
+      
+      // Validate that all IDs are valid UUIDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(player1Id) || !uuidRegex.test(player2Id) || !uuidRegex.test(currentUserId)) {
+        console.error('❌ Invalid UUID format:', {
+          player1Id: player1Id,
+          player2Id: player2Id,
+          currentUserId: currentUserId
+        })
+        alert('Invalid player IDs. Cannot create rematch.')
+        return
+      }
+      
+      // Create new match with same players and bet amount - AUTO START
+      const { data: newMatch, error: matchError } = await supabase
+        .from('matches')
+        .insert({
+          game_id: '69bf26d2-110b-40d9-b20a-d5cfab14d133', // Actual Four in a Row game ID
+          player1_id: player1Id,
+          player2_id: player2Id,
+          bet_amount: betAmount,
+          status: 'in_progress', // Auto-start the rematch
+          started_at: new Date().toISOString(),
+          game_data: {
+            board: Array(42).fill(null),
+            currentPlayer: 'player1',
+            winner: null
+          }
+        })
+        .select()
+        .single()
+      
+      if (matchError) {
+        console.error('❌ Error creating rematch:', matchError)
+        console.error('❌ Match creation failed with details:', {
+          error: matchError,
+          game_id: '69bf26d2-110b-40d9-b20a-d5cfab14d133',
+          player1_id: player1Id,
+          player2_id: player2Id,
+          bet_amount: betAmount
+        })
+        alert(`Failed to create rematch: ${matchError.message}`)
+        return
+      }
+      
+      console.log('✅ New match created successfully:', newMatch)
+      console.log('🔍 New match details:', {
+        id: newMatch.id,
+        game_id: newMatch.game_id,
+        status: newMatch.status,
+        player1_id: newMatch.player1_id,
+        player2_id: newMatch.player2_id
+      })
+      
+      // Save rematch acceptance to match_history
+      const { error: historyError } = await supabase
+        .from('match_history')
+        .insert({
+          match_id: matchId,
+          user_id: currentUserId,
+          action_type: 'rematch_accepted',
+          action_data: {
+            accepted_by: currentUserId,
+            new_match_id: newMatch.id,
+            accepted_at: new Date().toISOString()
+          }
+        })
+      
+      if (historyError) {
+        console.error('Error saving rematch acceptance:', historyError)
+      }
+      
+      setRematchStatus('accepted')
+      console.log('✅ Rematch accepted, new match created:', newMatch.id)
+      
+      // Redirect to new match - use the most reliable method
+      console.log('🔄 Redirecting to new match:', `/games/match/${newMatch.id}`)
+      
+      // Use window.location.href for immediate redirect
+      window.location.href = `/games/match/${newMatch.id}`
+    } catch (error) {
+      console.error('Error accepting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const rejectRematch = async () => {
+    if (!currentUserId) return
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      // Save rematch rejection to match_history
+      const { error } = await supabase
+        .from('match_history')
+        .insert({
+          match_id: matchId,
+          user_id: currentUserId,
+          action_type: 'rematch_rejected',
+          action_data: {
+            rejected_by: currentUserId,
+            rejected_at: new Date().toISOString()
+          }
+        })
+      
+      if (error) {
+        console.error('Error rejecting rematch:', error)
+        return
+      }
+      
+      setRematchStatus('rejected')
+      console.log('✅ Rematch rejected')
+    } catch (error) {
+      console.error('Error rejecting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 relative p-4">
       {/* Subtle gradient overlay */}
@@ -364,7 +821,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
       
       <div className="max-w-4xl mx-auto relative z-10">
         <div className="bg-gray-900/80 rounded-lg p-6">
-          <h1 className="text-2xl font-bold text-white mb-6">Connect 4 Match</h1>
+          <h1 className="text-2xl font-bold text-white mb-6">Four in a Row Match</h1>
           
           {/* Match Info */}
           <div className="bg-gray-800/80 rounded-lg p-4 mb-6">
@@ -388,9 +845,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             </div>
           </div>
           
-          {/* Connect 4 Game */}
+          {/* Four in a Row Game */}
           <div className="bg-gray-800/80 rounded-lg p-6">
-            <h2 className="text-xl text-white mb-4 text-center">Connect 4 Game</h2>
+            <h2 className="text-xl text-white mb-4 text-center">Four in a Row Game</h2>
             <div className="text-center">
               {currentStatus === 'cancelled' ? (
                 <div className="text-red-400 mb-6">
@@ -413,6 +870,84 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         )}
                       </p>
                       <p>This match has finished.</p>
+                      
+                      {/* Rematch Request Section */}
+                      <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+                        <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+                        
+                        {rematchStatus === 'none' && (
+                          <div className="text-center">
+                            <p className="text-gray-300 mb-4">Want to play again?</p>
+                            <button
+                              onClick={requestRematch}
+                              disabled={isLoadingRematch}
+                              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                            >
+                              {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
+                            </button>
+                            <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                          </div>
+                        )}
+                        
+                        {rematchStatus === 'requested' && (
+                          <div className="text-center">
+                            <p className="text-blue-400 mb-4">✅ Rematch request sent to {currentUserId === player1Id ? playerNames.player2 : playerNames.player1}!</p>
+                            <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                          </div>
+                        )}
+                        
+                        {rematchStatus === 'accepted' && (
+                          <div className="text-center">
+                            <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
+                            <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                          </div>
+                        )}
+                        
+                        {rematchStatus === 'received' && (
+                          <div className="text-center">
+                            <p className="text-yellow-400 mb-4">🎮 {currentUserId === player1Id ? playerNames.player2 : playerNames.player1} wants a rematch!</p>
+                            <div className="flex gap-3 justify-center">
+                              <button
+                                onClick={acceptRematch}
+                                disabled={isLoadingRematch}
+                                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                              >
+                                {isLoadingRematch ? 'Accepting...' : 'Accept'}
+                              </button>
+                              <button
+                                onClick={rejectRematch}
+                                disabled={isLoadingRematch}
+                                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                              >
+                                {isLoadingRematch ? 'Rejecting...' : 'Decline'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {rematchStatus === 'accepted' && (
+                          <div className="text-center">
+                            <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
+                            <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                          </div>
+                        )}
+                        
+                        {rematchStatus === 'rejected' && (
+                          <div className="text-center">
+                            <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                            <button
+                              onClick={() => {
+                                setRematchStatus('none')
+                                setRematchRequested(false)
+                                setRematchRequestedBy(null)
+                              }}
+                              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                            >
+                              Request Again
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -424,30 +959,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               ) : currentStatus === 'in_progress' ? (
                 <>
                   <p className="text-gray-300 mb-6">Click on column arrows to place chips</p>
-                  
-                  {/* Column buttons - NOW WITH REAL MULTIPLAYER LOGIC! */}
-                  <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto mb-4">
-                    {Array.from({ length: 7 }, (_, col) => {
-                      // Check if column is full
-                      const isColumnFull = board[col] !== null
-                      const canPlay = !isColumnFull && !winner && isMyTurn && currentStatus === 'in_progress' && !viewingHistory
-                      
-                      return (
-                        <button
-                          key={col}
-                          onClick={() => dropPiece(col)}
-                          disabled={!canPlay}
-                          className={`h-8 md:h-12 text-white text-sm md:text-xl rounded font-bold transition-colors flex items-center justify-center ${
-                            canPlay
-                              ? 'bg-blue-600 hover:bg-blue-500 cursor-pointer'
-                              : 'bg-gray-500 cursor-not-allowed opacity-50'
-                          }`}
-                        >
-                          ↓
-                        </button>
-                      )
-                    })}
-                  </div>
                   
                   <div className="mt-6 text-gray-300 text-center">
                     {winner ? (
@@ -533,6 +1044,33 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   </div>
                 </div>
               )}
+              
+              {/* Column arrows - placed right above the board */}
+              {currentStatus === 'in_progress' && (
+                <div className="grid grid-cols-7 gap-2 max-w-md mx-auto mb-2 mt-4">
+                  {Array.from({ length: 7 }, (_, col) => {
+                    // Check if column is full
+                    const isColumnFull = board[col] !== null
+                    const canPlay = !isColumnFull && !winner && isMyTurn && currentStatus === 'in_progress' && !viewingHistory
+                    
+                    return (
+                      <button
+                        key={col}
+                        onClick={() => dropPiece(col)}
+                        disabled={!canPlay}
+                        className={`h-8 md:h-12 text-white text-sm md:text-xl rounded font-bold transition-colors flex items-center justify-center ${
+                          canPlay
+                            ? 'bg-blue-600 hover:bg-blue-500 cursor-pointer'
+                            : 'bg-gray-500 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        ↓
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              
               <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto">
                 {Array.from({ length: 7 }, (_, col) => {
                   const canPlay = isMyTurn && !winner && currentStatus === 'in_progress' && !viewingHistory

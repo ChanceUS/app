@@ -13,6 +13,7 @@ import SimpleConnectFour from './simple-connect-four'
 import MathBlitz from './math-blitz'
 import MultiplayerMathBlitz from './multiplayer-math-blitz'
 import TriviaChallenge from './trivia-challenge'
+import MultiplayerTriviaChallenge from './multiplayer-trivia-challenge'
 import { 
   Users, 
   Clock, 
@@ -352,6 +353,23 @@ export default function EnhancedMatchInterface({
         console.error('Failed to update match status:', error)
         return
       }
+
+      // Mark all matchmaking queues for both players as matched
+      console.log('🧹 Cleaning up matchmaking queues for both players')
+      if (match.player1_id) {
+        await supabase
+          .from("matchmaking_queue")
+          .update({ status: "matched" })
+          .eq("user_id", match.player1_id)
+          .eq("status", "waiting")
+      }
+      if (match.player2_id) {
+        await supabase
+          .from("matchmaking_queue")
+          .update({ status: "matched" })
+          .eq("user_id", match.player2_id)
+          .eq("status", "waiting")
+      }
       
       console.log('✅ Match started successfully!')
       console.log('✅ Game should now render MultiplayerMathBlitz component')
@@ -485,6 +503,16 @@ export default function EnhancedMatchInterface({
         (payload) => {
           console.log('🔄 Match updated in real-time:', payload.new)
           const updatedMatch = payload.new as Match
+          
+          // Update game state from database for trivia games
+          const isTriviaGame = game?.name?.toLowerCase().trim() === 'trivia challenge'
+          if (isTriviaGame && updatedMatch.game_data?.gameState) {
+            console.log('🔄 Updating trivia game state from database:', updatedMatch.game_data.gameState)
+            setGameState(prev => ({
+              ...prev,
+              gameData: updatedMatch.game_data || {}
+            }))
+          }
           
           // Check if both players are now ready
           if (updatedMatch.game_data?.player1_ready && updatedMatch.game_data?.player2_ready && 
@@ -743,23 +771,84 @@ export default function EnhancedMatchInterface({
   // Handle game completion
   const handleGameComplete = useCallback(async (winner: 'player1' | 'player2' | 'draw') => {
     try {
+      console.log('🎮 Game completed, winner:', winner)
+      
       const winnerId = winner === 'draw' ? undefined : 
         winner === 'player1' ? match.player1_id : (match.player2_id || undefined)
 
-      await updateMatch({
+      console.log('🎮 Updating match status to completed:', { winnerId, matchId: match.id })
+
+      const updateResult = await updateMatch({
         status: 'completed',
         winner_id: winnerId,
         completed_at: new Date().toISOString()
       })
 
-      await addMatchHistory('game_completed', {
-        winner_id: winnerId || null,
-        timestamp: new Date().toISOString()
-      })
+      if (!updateResult) {
+        console.error('❌ Failed to update match status - this is not critical, game can still show results')
+        // Don't return here - continue to show results even if database update fails
+      } else {
+        console.log('✅ Match status updated successfully')
+      }
+
+      // Transfer tokens to winner if there is one
+      if (winnerId && match.bet_amount > 0) {
+        try {
+          console.log('💰 Processing winner payout:', { winnerId, betAmount: match.bet_amount })
+          
+          const winnings = match.bet_amount * 2 // Both players' bets
+          
+          // Get current tokens for the winner
+          const { data: winnerData } = await supabase
+            .from('users')
+            .select('tokens')
+            .eq('id', winnerId)
+            .single()
+          
+          if (winnerData) {
+            // Update winner's tokens
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ tokens: (winnerData.tokens || 0) + winnings })
+              .eq('id', winnerId)
+            
+            if (updateError) {
+              console.error('❌ Failed to update winner tokens:', updateError)
+            } else {
+              console.log('✅ Winner tokens updated successfully')
+              
+              // Create transaction record
+              await supabase.from('transactions').insert({
+                user_id: winnerId,
+                match_id: match.id,
+                amount: winnings,
+                type: 'win',
+                description: `Won match - ${winnings} tokens`
+              })
+            }
+          }
+        } catch (payoutError) {
+          console.error('❌ Failed to process winner payout:', payoutError)
+          // Don't fail the entire completion process
+        }
+      }
+
+      try {
+        await addMatchHistory('game_completed', {
+          winner_id: winnerId || null,
+          timestamp: new Date().toISOString()
+        })
+        console.log('✅ Match history updated successfully')
+      } catch (historyError) {
+        console.error('❌ Failed to update match history - this is not critical:', historyError)
+        // Don't fail the entire completion process for history errors
+      }
 
       onMatchComplete?.(winnerId || null)
     } catch (error) {
-      console.error('Failed to complete game:', error)
+      console.error('❌ Failed to complete game:', error)
+      console.log('🔄 Game completion failed, but continuing to show results...')
+      // Don't redirect on error - let the user stay on the match page and see results
     }
   }, [updateMatch, addMatchHistory, match, onMatchComplete])
 
@@ -850,8 +939,9 @@ export default function EnhancedMatchInterface({
             onGameComplete={handleGameComplete}
           />
         case '4 in a row':
+        case 'four in a row':
         case 'connect 4':
-          console.log('🎮 Rendering Simple Connect 4 with props:', {
+          console.log('🎮 Rendering Simple Four in a Row with props:', {
             matchId: match.id,
             betAmount: match.bet_amount || 0,
             status: match.status,
@@ -868,22 +958,13 @@ export default function EnhancedMatchInterface({
             player2Id={match.player2_id}
           />
         case 'trivia challenge':
-          console.log('🎮 Rendering Trivia Challenge with props:', {
-            isActive: true,
-            currentPlayer: currentUser.id === match.player1_id ? "player1" : "player2",
-            isMyTurn: true, // Always allow trivia questions for both players
-            gameState: gameState.status,
-            matchStatus: match.status,
-            gameName: game?.name,
-            normalizedGameName: gameName
-          })
-          return <TriviaChallenge
-            onGameEnd={handleGameComplete}
-            isActive={true}
-            currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={true} // Always allow trivia questions for both players
-            onMove={handleGameMove}
-            gameData={gameState.gameData}
+          console.log('🎮 Rendering Multiplayer Trivia Challenge')
+          return <MultiplayerTriviaChallenge
+            matchId={match.id}
+            currentUserId={currentUser.id}
+            player1Id={match.player1_id}
+            player2Id={match.player2_id || ''}
+            onGameComplete={handleGameComplete}
           />
         default:
           console.log('🎮 Unknown game type, falling back to Math Blitz. Game name was:', game?.name)
@@ -926,7 +1007,7 @@ export default function EnhancedMatchInterface({
             onGameComplete={handleGameComplete}
           />
         case '4 in a row':
-        case 'connect 4':
+        case 'four in a row':
           return <SimpleConnectFour
             matchId={match.id}
             betAmount={match.bet_amount || 0}
@@ -936,22 +1017,13 @@ export default function EnhancedMatchInterface({
             player2Id={match.player2_id}
           />
         case 'trivia challenge':
-          console.log('🎮 Fallback: Rendering Trivia Challenge with props:', {
-            isActive: true,
-            currentPlayer: currentUser.id === match.player1_id ? "player1" : "player2",
-            isMyTurn: true, // Always allow trivia questions for both players
-            gameState: gameState.status,
-            matchStatus: match.status,
-            gameName: game?.name,
-            normalizedGameName: fallbackGameName
-          })
-          return <TriviaChallenge
-            onGameEnd={handleGameComplete}
-            isActive={true}
-            currentPlayer={currentUser.id === match.player1_id ? "player1" : "player2"}
-            isMyTurn={true} // Always allow trivia questions for both players
-            onMove={handleGameMove}
-            gameData={gameState.gameData}
+          console.log('🎮 Fallback: Rendering Multiplayer Trivia Challenge')
+          return <MultiplayerTriviaChallenge
+            matchId={match.id}
+            currentUserId={currentUser.id}
+            player1Id={match.player1_id}
+            player2Id={match.player2_id || ''}
+            onGameComplete={handleGameComplete}
           />
         default:
           console.log('🎮 Fallback: Unknown game type, falling back to Math Blitz. Game name was:', game?.name)
@@ -993,14 +1065,14 @@ export default function EnhancedMatchInterface({
           />
         case '4 in a row':
         case 'connect 4':
-          return <SimpleConnectFour
-            matchId="solo-play"
-            betAmount={0}
-            status="in_progress"
-            currentUserId="solo-user"
-            player1Id="solo-user"
-            player2Id="solo-opponent"
-          />
+          // Don't render solo-play for multiplayer matches - just show waiting message
+          return (
+            <div className="text-center py-8">
+              <div className="text-6xl mb-4">🔴</div>
+              <h3 className="text-white text-lg font-semibold">Four in a Row</h3>
+              <p className="text-gray-400">Waiting for opponent to join...</p>
+            </div>
+          )
         default:
           console.log('🎮 Unknown game type, falling back to Math Blitz')
           return <MathBlitz 
@@ -1052,6 +1124,21 @@ export default function EnhancedMatchInterface({
               gameStateStatus: gameState.status,
               shouldUpdate: matchData.status !== localMatch.status
             })
+          }
+          
+          // Check if trivia game state has been updated
+          const isTriviaGame = game?.name?.toLowerCase().trim() === 'trivia challenge'
+          if (isTriviaGame && matchData?.game_data?.gameState) {
+            const currentGameState = JSON.stringify(gameState.gameData?.gameState)
+            const dbGameState = JSON.stringify(matchData.game_data.gameState)
+            
+            if (currentGameState !== dbGameState) {
+              console.log('🔄 Trivia game state differs, updating from database:', matchData.game_data.gameState)
+              setGameState(prev => ({
+                ...prev,
+                gameData: matchData.game_data || {}
+              }))
+            }
           }
           
           if (matchData && matchData.status !== localMatch.status) {
@@ -1143,7 +1230,7 @@ export default function EnhancedMatchInterface({
               </span>
             )}
           </div>
-          {gameState.status === 'playing' && (
+          {gameState.status === 'playing' && game?.name?.toLowerCase() !== 'math blitz' && (
             <div className="flex items-center space-x-2">
               <Clock className="h-4 w-4" />
               <span>Turn: {isMyTurn ? 'Your turn' : 'Opponent\'s turn'}</span>
@@ -1339,7 +1426,7 @@ export default function EnhancedMatchInterface({
         )}
 
         {/* Game Interface */}
-        {(gameState.status === 'playing' || gameState.status === 'completed' || gameState.status === 'countdown' || gameState.status === 'waiting') && (
+        {(gameState.status === 'playing' || gameState.status === 'completed' || gameState.status === 'countdown') && (
           <div>
             {renderGame()}
           </div>

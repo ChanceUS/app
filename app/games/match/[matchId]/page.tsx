@@ -242,6 +242,25 @@ export default function MatchPage({ params }: MatchPageProps) {
                         started_at: new Date().toISOString(),
                         game_data: updatedGameData
                       }))
+                      
+                      // Clean up matchmaking queues for both players
+                      console.log('🧹 Cleaning up matchmaking queues...')
+                      if (match.player1_id) {
+                        await supabase
+                          .from("matchmaking_queue")
+                          .update({ status: "matched" })
+                          .eq("user_id", match.player1_id)
+                          .eq("status", "waiting")
+                        console.log('✅ Marked player1 queues as matched')
+                      }
+                      if (match.player2_id) {
+                        await supabase
+                          .from("matchmaking_queue")
+                          .update({ status: "matched" })
+                          .eq("user_id", match.player2_id)
+                          .eq("status", "waiting")
+                        console.log('✅ Marked player2 queues as matched')
+                      }
                     }
                   } else {
                     // Only current player ready - update game_data
@@ -307,10 +326,46 @@ export default function MatchPage({ params }: MatchPageProps) {
                 <p className="text-gray-400">
                   Bet {match.bet_amount} tokens to challenge {match.player1?.display_name || match.player1?.username}
                 </p>
-                <div className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded cursor-pointer inline-flex items-center">
+                <button 
+                  onClick={async () => {
+                    try {
+                      // Check if user has enough tokens
+                      if (user.tokens < match.bet_amount) {
+                        alert(`You need ${match.bet_amount} tokens to join this match. You currently have ${user.tokens} tokens.`)
+                        return
+                      }
+
+                      // Join the match as player 2
+                      const { error } = await supabase
+                        .from('matches')
+                        .update({
+                          player2_id: user.id,
+                          game_data: {
+                            ...match.game_data,
+                            player2_ready: false // Player 2 starts as not ready
+                          }
+                        })
+                        .eq('id', match.id)
+
+                      if (error) {
+                        console.error('Error joining match:', error)
+                        alert('Failed to join match. Please try again.')
+                        return
+                      }
+
+                      console.log('Successfully joined match!')
+                      // Refresh the page to show updated match state
+                      window.location.reload()
+                    } catch (error) {
+                      console.error('Error joining match:', error)
+                      alert('Failed to join match. Please try again.')
+                    }
+                  }}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded cursor-pointer inline-flex items-center transition-colors"
+                >
                   <Users className="mr-2 h-4 w-4" />
                   Join Match
-                </div>
+                </button>
               </div>
             </CardContent>
           </Card>

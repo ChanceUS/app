@@ -12,7 +12,7 @@ interface CreateMatchPageProps {
 }
 
 export default async function CreateMatchPage({ params }: CreateMatchPageProps) {
-  const resolvedParams = params
+  const resolvedParams = await params
   
   if (!isSupabaseConfigured) {
     return (

@@ -236,16 +236,15 @@ export default function MatchmakingInterface({
 
   const matchTypeInfo = getMatchTypeInfo()
 
-  // Render game components
+  // When match is found, show loading while redirecting
   if (status === 'found_live' && matchId) {
     return (
-      <MultiplayerMathBlitz
-        matchId={matchId}
-        currentUserId={currentUserId}
-        player1Id={currentUserId} // This will be determined by the match data
-        player2Id={currentUserId} // This will be determined by the match data
-        onGameComplete={handleGameComplete}
-      />
+      <Card className="w-full max-w-2xl mx-auto bg-black border-gray-800">
+        <CardContent className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Match found! Redirecting to game...</p>
+        </CardContent>
+      </Card>
     )
   }
 
