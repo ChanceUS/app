@@ -820,9 +820,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
       <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
       
       <div className="max-w-4xl mx-auto relative z-10">
-        <div className="bg-gray-900/80 rounded-lg p-6">
-          <h1 className="text-2xl font-bold text-white mb-6">Four in a Row Match</h1>
-          
+        <div className="bg-gray-900/80 rounded-lg p-6">          
           {/* Match Info */}
           <div className="bg-gray-800/80 rounded-lg p-4 mb-6">
             <div className="flex justify-between items-center">
