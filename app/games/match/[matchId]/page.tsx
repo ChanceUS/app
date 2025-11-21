@@ -73,6 +73,18 @@ export default function MatchPage({ params }: MatchPageProps) {
           return
         }
 
+        // Check if this match is part of a tournament
+        const { data: tournamentMatch } = await supabase
+          .from("tournament_matches")
+          .select("tournament_id")
+          .eq("match_id", matchId)
+          .single()
+
+        if (tournamentMatch) {
+          // Store tournament ID for redirect after completion
+          ;(matchData as any).tournament_id = tournamentMatch.tournament_id
+        }
+
         setMatch(matchData)
       } catch (error) {
         console.error("Error loading data:", error)
@@ -97,9 +109,18 @@ export default function MatchPage({ params }: MatchPageProps) {
           table: 'matches', 
           filter: `id=eq.${matchId}` 
         }, 
-        (payload) => {
+        async (payload) => {
           console.log('🔄 Match updated via real-time:', payload.new)
-          setMatch(payload.new)
+          const updatedMatch = payload.new as any
+          setMatch(updatedMatch)
+
+          // If match completed and it's a tournament match, redirect to tournament
+          if (updatedMatch.status === 'completed' && updatedMatch.tournament_id) {
+            console.log('🏆 Tournament match completed, redirecting to tournament page...')
+            setTimeout(() => {
+              router.push(`/tournaments/${updatedMatch.tournament_id}`)
+            }, 2000) // 2 second delay to show results
+          }
         }
       )
       .subscribe()
@@ -153,10 +174,20 @@ export default function MatchPage({ params }: MatchPageProps) {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Navigation */}
         <div className="mb-6">
-          <Link href="/games" className="inline-flex items-center text-gray-300 hover:text-white bg-transparent border border-gray-700 rounded px-4 py-2">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Games
-          </Link>
+          {(match as any)?.tournament_id ? (
+            <Link 
+              href={`/tournaments/${(match as any).tournament_id}`}
+              className="inline-flex items-center text-gray-300 hover:text-white bg-transparent border border-gray-700 rounded px-4 py-2"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Tournament
+            </Link>
+          ) : (
+            <Link href="/games" className="inline-flex items-center text-gray-300 hover:text-white bg-transparent border border-gray-700 rounded px-4 py-2">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Games
+            </Link>
+          )}
         </div>
 
         {/* Match Header */}
@@ -311,9 +342,16 @@ export default function MatchPage({ params }: MatchPageProps) {
         <EnhancedMatchInterface
           match={match}
           currentUser={user}
-          onMatchComplete={(winnerId) => {
-            console.log('Match completed, winner:', winnerId)
-            // The component will handle the match completion
+          onMatchComplete={async (winnerId) => {
+            console.log('🏁 Match completed, winner:', winnerId)
+            
+            // If this is a tournament match, redirect to tournament page after a delay
+            if ((match as any)?.tournament_id) {
+              console.log('🏆 Tournament match completed, redirecting to tournament...')
+              setTimeout(() => {
+                router.push(`/tournaments/${(match as any).tournament_id}`)
+              }, 3000) // 3 second delay to show results
+            }
           }}
         />
 

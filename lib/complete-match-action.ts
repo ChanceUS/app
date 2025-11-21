@@ -29,6 +29,33 @@ export async function completeMatch(matchId: string, winnerId: string | null, ga
 
     console.log('✅ Server action: Match completed successfully:', data)
 
+    // Check if this match is part of a tournament
+    const { data: tournamentMatch } = await supabase
+      .from('tournament_matches')
+      .select('tournament_id, round_number')
+      .eq('match_id', matchId)
+      .single()
+
+    if (tournamentMatch) {
+      // Update tournament match status
+      await supabase
+        .from('tournament_matches')
+        .update({ status: 'completed' })
+        .eq('match_id', matchId)
+
+      console.log('✅ Tournament match updated:', tournamentMatch)
+
+      // Revalidate tournament page
+      revalidatePath(`/tournaments/${tournamentMatch.tournament_id}`)
+
+      // Return tournament info so client can redirect
+      return { 
+        success: true, 
+        data,
+        tournament_id: tournamentMatch.tournament_id 
+      }
+    }
+
     // Revalidate the games page to update the UI
     revalidatePath('/games')
     revalidatePath('/matches')

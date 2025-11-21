@@ -77,6 +77,12 @@ export default function Header({ user }: HeaderProps) {
               >
                 Bar Trivia
               </Link>
+              <Link
+                href="/tournaments"
+                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+              >
+                Tournaments
+              </Link>
             </nav>
           )}
 

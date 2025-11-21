@@ -14,6 +14,7 @@ interface SimpleConnectFourProps {
 }
 
 export default function SimpleConnectFour({ matchId, betAmount, status, currentUserId, player1Id, player2Id }: SimpleConnectFourProps) {
+  const [isTournamentMatch, setIsTournamentMatch] = useState(false)
   const router = useRouter()
   const [board, setBoard] = useState(Array(42).fill(null))
   const [currentStatus, setCurrentStatus] = useState<string>(status)
@@ -50,6 +51,12 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         return
       }
 
+      console.log('📝 Move history query result:', { 
+        matchId, 
+        historyDataLength: historyData?.length || 0,
+        historyData: historyData 
+      })
+
       if (historyData && historyData.length > 0) {
         console.log('📝 Loading move history from database:', historyData.length, 'moves')
         
@@ -59,6 +66,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           const playerId = entry.user_id
           const player = playerId === player1Id ? 'player1' : 'player2'
           
+          console.log('📝 Processing move:', { index, playerId, player, moveData })
+          
           return {
             board: moveData.board || [],
             move: moveData.column || moveData.move || 0,
@@ -67,10 +76,12 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           }
         })
         
+        console.log('📝 Setting move history:', moveHistoryFromDB)
         setMoveHistory(moveHistoryFromDB)
         setHistoryReconstructed(true)
       } else {
         // No move history found, start with empty
+        console.log('⚠️ No move history found in database')
         setMoveHistory([])
         setHistoryReconstructed(true)
       }
@@ -118,6 +129,26 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
       loadMoveHistoryFromDB()
     }
   }, [board, historyReconstructed])
+
+  // Load move history when viewing a completed match
+  useEffect(() => {
+    if (currentStatus === 'completed' && !historyReconstructed) {
+      console.log('🔄 Match is completed, loading move history...')
+      loadMoveHistoryFromDB()
+    }
+  }, [currentStatus, historyReconstructed])
+
+  // When move history loads for completed matches, set board to final state
+  useEffect(() => {
+    if (currentStatus === 'completed' && moveHistory.length > 0 && board.every(cell => cell === null)) {
+      console.log('🔄 Match completed with empty board, setting from move history...')
+      const finalBoard = moveHistory[moveHistory.length - 1].board
+      if (finalBoard && finalBoard.length === 42) {
+        console.log('✅ Setting board from final move history:', finalBoard)
+        setBoard(finalBoard)
+      }
+    }
+  }, [moveHistory, currentStatus, board])
   
 
   // Load game state from database and check for updates
@@ -143,8 +174,20 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           }
         }
 
-        // Check for rematch requests
-        if (currentStatus === 'completed' && currentUserId) {
+        // Check if this is a tournament match
+        const { data: tournamentMatch } = await supabase
+          .from('tournament_matches')
+          .select('tournament_id')
+          .eq('match_id', matchId)
+          .single()
+        
+        if (tournamentMatch) {
+          setIsTournamentMatch(true)
+          console.log('🏆 This is a tournament match, rematch disabled')
+        }
+
+        // Check for rematch requests (only if not a tournament match)
+        if (currentStatus === 'completed' && currentUserId && !tournamentMatch) {
           console.log('🔍 Checking for rematch requests...', { currentStatus, currentUserId, matchId })
           // First, check if there are any new matches created recently that might be rematches
           const { data: recentMatches } = await supabase
@@ -293,14 +336,25 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           if (data.game_data) {
             const gameData = data.game_data
             
-            // Update board if different
-            if (gameData.board && JSON.stringify(gameData.board) !== JSON.stringify(board)) {
-              console.log('🔄 Updating board from database:', gameData.board)
-              setBoard(gameData.board)
+            // Update board if different, or if board is empty and we have game_data
+            if (gameData.board) {
+              const boardIsEmpty = board.every(cell => cell === null)
+              const boardsAreDifferent = JSON.stringify(gameData.board) !== JSON.stringify(board)
               
-              // Load move history from database instead of reconstructing
-              if (gameData.board && !historyReconstructed) {
-                console.log('🔄 Loading move history from database')
+              if (boardsAreDifferent || (boardIsEmpty && gameData.board.length === 42)) {
+                console.log('🔄 Updating board from database:', gameData.board)
+                setBoard(gameData.board)
+                
+                // Load move history from database instead of reconstructing
+                if (!historyReconstructed) {
+                  console.log('🔄 Loading move history from database')
+                  loadMoveHistoryFromDB()
+                }
+              }
+            } else if (data.status === 'completed') {
+              // If no board in game_data but match is completed, try loading from history
+              console.log('⚠️ No board in game_data for completed match, will load from history')
+              if (!historyReconstructed) {
                 loadMoveHistoryFromDB()
               }
             }
@@ -869,7 +923,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       </p>
                       <p>This match has finished.</p>
                       
-                      {/* Rematch Request Section */}
+                      {/* Rematch Request Section - Only show for non-tournament matches */}
+                      {!isTournamentMatch && (
                       <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
                         <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
                         
@@ -946,6 +1001,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                   ) : (
                     <div>
@@ -1087,8 +1143,11 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       {Array.from({ length: 6 }, (_, row) => {
                         const i = row * 7 + col  // Fixed: should be row * 7 + col, not col + (row * 7)
                         // Use historical board if viewing history, otherwise use current board
-                        const displayBoard = viewingHistory && currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length 
-                          ? moveHistory[currentHistoryIndex].board 
+                        // If viewing history but no index set, show the last move (final state)
+                        const displayBoard = viewingHistory && moveHistory.length > 0
+                          ? (currentHistoryIndex >= 0 && currentHistoryIndex < moveHistory.length
+                              ? moveHistory[currentHistoryIndex].board
+                              : moveHistory[moveHistory.length - 1].board) // Show last move if index not set
                           : board
                         const piece = displayBoard[i]
                         let pieceColor = 'bg-gray-700 border-gray-600'
@@ -1125,7 +1184,17 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   </h3>
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setViewingHistory(!viewingHistory)}
+                      onClick={() => {
+                        const newViewingHistory = !viewingHistory
+                        setViewingHistory(newViewingHistory)
+                        // When opening history, show the last move (final board state)
+                        if (newViewingHistory && moveHistory.length > 0) {
+                          setCurrentHistoryIndex(moveHistory.length - 1)
+                        } else if (!newViewingHistory) {
+                          // When closing history, reset to show current board
+                          setCurrentHistoryIndex(-1)
+                        }
+                      }}
                       className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
                     >
                       {viewingHistory ? 'Hide History' : 'View History'}
