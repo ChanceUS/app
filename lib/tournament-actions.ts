@@ -155,16 +155,21 @@ export async function registerForTournament(tournamentId: string) {
       return { error: "You must be logged in to register" }
     }
 
-    // Get tournament
+    // Get tournament - allow registration as long as tournament is not completed/cancelled and not full
     const { data: tournament, error: tournamentError } = await supabase
       .from("tournaments")
       .select("*")
       .eq("id", tournamentId)
-      .eq("status", "registration")
+      .in("status", ["registration", "in_progress"])
       .single()
 
     if (tournamentError || !tournament) {
       return { error: "Tournament not found or registration closed" }
+    }
+
+    // Don't allow registration if tournament is completed or cancelled
+    if (tournament.status === "completed" || tournament.status === "cancelled") {
+      return { error: "Tournament registration is closed" }
     }
 
     // Check if already registered

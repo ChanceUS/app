@@ -258,7 +258,7 @@ export default function TournamentDetailClient({
       )}
 
       {/* Registration/Start Section */}
-      {tournament.status === "registration" && (
+      {(tournament.status === "registration" || (tournament.status === "in_progress" && participants.length < tournament.max_participants)) && (
         <Card className="bg-gray-900/80 border-gray-800">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
@@ -276,8 +276,20 @@ export default function TournamentDetailClient({
             {!isRegistered ? (
               <div className="space-y-4">
                 <p className="text-gray-300">
-                  Register now to compete in this tournament. Entry fee:{" "}
-                  <span className="font-semibold text-white">{tournament.entry_fee} tokens</span>
+                  {tournament.status === "in_progress" ? (
+                    <>
+                      Late registration is open! Join this tournament. Entry fee:{" "}
+                      <span className="font-semibold text-white">{tournament.entry_fee} tokens</span>
+                      <span className="text-yellow-400 text-sm block mt-1">
+                        Note: Late registrants may be added to future rounds or as replacements.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Register now to compete in this tournament. Entry fee:{" "}
+                      <span className="font-semibold text-white">{tournament.entry_fee} tokens</span>
+                    </>
+                  )}
                 </p>
                 <Button
                   onClick={handleRegister}
