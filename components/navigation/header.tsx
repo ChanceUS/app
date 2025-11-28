@@ -11,11 +11,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, User, Wallet, Coins, Gamepad2 } from "lucide-react"
+import { LogOut, Settings, User, Wallet, Coins, Gamepad2, Menu, Trophy, MessageSquare, Users } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/lib/actions"
 import type { User as UserType } from "@/lib/supabase/client"
 import Image from "next/image"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 
 interface HeaderProps {
   user?: UserType | null
@@ -46,50 +53,145 @@ export default function Header({ user }: HeaderProps) {
           </Link>
 
           {user && (
-            <nav className="hidden md:flex items-center space-x-8">
-              <Link
-                href="/dashboard"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/games"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Games
-              </Link>
-              <Link
-                href="/matches"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Matches
-              </Link>
-              <Link
-                href="/wallet"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Wallet
-              </Link>
-              <Link
-                href="/bars"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Bar Trivia
-              </Link>
-              <Link
-                href="/tournaments"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Tournaments
-              </Link>
-              <Link
-                href="/chat"
-                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
-              >
-                Chat
-              </Link>
-            </nav>
+            <>
+              {/* Desktop Navigation */}
+              <nav className="hidden md:flex items-center space-x-8">
+                <Link
+                  href="/dashboard"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/games"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Games
+                </Link>
+                <Link
+                  href="/matches"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Matches
+                </Link>
+                <Link
+                  href="/wallet"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Wallet
+                </Link>
+                <Link
+                  href="/bars"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Bar Trivia
+                </Link>
+                <Link
+                  href="/tournaments"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Tournaments
+                </Link>
+                <Link
+                  href="/chat"
+                  className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+                >
+                  Chat
+                </Link>
+              </nav>
+
+              {/* Mobile Navigation Menu */}
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden text-white hover:bg-white/10"
+                  >
+                    <Menu className="h-6 w-6" />
+                    <span className="sr-only">Open menu</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[300px] bg-gray-900 border-gray-800">
+                  <SheetHeader>
+                    <SheetTitle className="text-white text-left">Navigation</SheetTitle>
+                  </SheetHeader>
+                  <nav className="flex flex-col space-y-2 mt-6">
+                    <Link
+                      href="/dashboard"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <User className="h-5 w-5" />
+                      <span>Dashboard</span>
+                    </Link>
+                    <Link
+                      href="/games"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Gamepad2 className="h-5 w-5" />
+                      <span>Games</span>
+                    </Link>
+                    <Link
+                      href="/matches"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Trophy className="h-5 w-5" />
+                      <span>Matches</span>
+                    </Link>
+                    <Link
+                      href="/wallet"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Wallet className="h-5 w-5" />
+                      <span>Wallet</span>
+                    </Link>
+                    <Link
+                      href="/bars"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Users className="h-5 w-5" />
+                      <span>Bar Trivia</span>
+                    </Link>
+                    <Link
+                      href="/tournaments"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Trophy className="h-5 w-5" />
+                      <span>Tournaments</span>
+                    </Link>
+                    <Link
+                      href="/chat"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <MessageSquare className="h-5 w-5" />
+                      <span>Chat</span>
+                    </Link>
+                    <div className="border-t border-gray-700 my-2"></div>
+                    <Link
+                      href="/profile"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <User className="h-5 w-5" />
+                      <span>Profile</span>
+                    </Link>
+                    <Link
+                      href="/settings"
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                    >
+                      <Settings className="h-5 w-5" />
+                      <span>Settings</span>
+                    </Link>
+                    <button
+                      onClick={() => signOut()}
+                      className="flex items-center space-x-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors text-left w-full"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </nav>
+                </SheetContent>
+              </Sheet>
+            </>
           )}
 
           <div className="flex items-center space-x-4">
