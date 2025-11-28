@@ -324,25 +324,6 @@ export default async function GamesPage() {
               <p className="text-gray-400 text-sm sm:text-lg">Choose your game and test your skills against other players</p>
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
-              <Button 
-                asChild
-                variant="outline"
-                size="sm"
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
-              >
-                <Link href="/games">
-                  🔄 Refresh
-                </Link>
-              </Button>
-              <Button
-                asChild
-                size="sm"
-                className="bg-orange-600 hover:bg-orange-700 text-white"
-              >
-                <Link href={`/games/${games[0]?.id}/create`}>
-                  Create New Match
-                </Link>
-              </Button>
             </div>
           </div>
         </div>

@@ -65,16 +65,16 @@ export default function GameCard({ game, activeMatches = 0, onlineUsers = 0 }: G
   console.log("🎮 GameCard rendering for:", { id: game.id, name: game.name, displayName, thumbnailSrc })
 
   return (
-    <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors mx-1 sm:mx-0">
+    <Card className="bg-gray-900/80 border-gray-800 hover:border-gray-700 transition-colors mx-1 sm:mx-0 group">
       <CardHeader className="text-center pb-3 sm:pb-4">
         <div className="flex justify-center mb-3 sm:mb-4">
-          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden">
+          <div className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden group-hover:scale-110 transition-transform duration-300">
             <Image
               src={thumbnailSrc}
               alt={displayName}
               fill
               className="object-cover"
-              sizes="(max-width: 640px) 64px, 80px"
+              sizes="(max-width: 640px) 128px, 160px"
             />
           </div>
         </div>
