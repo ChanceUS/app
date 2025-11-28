@@ -1489,96 +1489,41 @@ export default function EnhancedMatchInterface({
           </Alert>
         )}
         
-        {/* Player Information */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className={`p-4 rounded-lg ${isPlayer1 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
-            <div className="text-center">
-              <div className="text-sm text-gray-400 mb-1">Player 1</div>
-              <div className="text-white font-medium">
-                {isPlayer1 ? 'You' : (player1Data?.display_name || player1Data?.username || 'Waiting...')}
-              </div>
-              {isPlayer1 && <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>}
-            </div>
+        {/* Compact Player Information - Horizontal Layout */}
+        <div className="flex items-center justify-center gap-4 py-2">
+          <div className={`px-3 py-1.5 rounded-lg text-sm ${isPlayer1 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
+            <span className="text-gray-400 text-xs">P1:</span>{' '}
+            <span className="text-white font-medium">
+              {isPlayer1 ? 'You' : (player1Data?.display_name || player1Data?.username || 'Waiting...')}
+            </span>
+            {isPlayer1 && <Badge className="ml-2 bg-orange-500/20 text-orange-400 text-xs">You</Badge>}
           </div>
-          <div className={`p-4 rounded-lg ${isPlayer2 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
-            <div className="text-center">
-              <div className="text-sm text-gray-400 mb-1">Player 2</div>
-              <div className="text-white font-medium">
-                {isPlayer2 ? 'You' : (localMatch.player2_id ? (player2Data?.display_name || player2Data?.username || 'Joined') : 'Waiting...')}
-              </div>
-              {isPlayer2 && <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>}
-            </div>
+          <div className="text-gray-500">vs</div>
+          <div className={`px-3 py-1.5 rounded-lg text-sm ${isPlayer2 ? 'bg-orange-500/20 border border-orange-500/30' : 'bg-gray-800/30'}`}>
+            <span className="text-gray-400 text-xs">P2:</span>{' '}
+            <span className="text-white font-medium">
+              {isPlayer2 ? 'You' : (localMatch.player2_id ? (player2Data?.display_name || player2Data?.username || 'Joined') : 'Waiting...')}
+            </span>
+            {isPlayer2 && <Badge className="ml-2 bg-orange-500/20 text-orange-400 text-xs">You</Badge>}
           </div>
         </div>
 
-        {/* Rematch Request Section - Show below player names when match is completed */}
-        {(localMatch.status === 'completed' || match.status === 'completed') && !isTournamentMatch && isInMatch && (
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-            <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
-            
-            {rematchStatus === 'none' && (
-              <div className="text-center">
-                <p className="text-gray-300 mb-4">Want to play again?</p>
-                <Button
-                  onClick={requestRematch}
-                  disabled={isLoadingRematch}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                >
-                  {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
-                </Button>
-                <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
-              </div>
-            )}
-            
-            {rematchStatus === 'requested' && (
-              <div className="text-center">
-                <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
-                <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
-              </div>
-            )}
-            
-            {rematchStatus === 'received' && (
-              <div className="text-center">
-                <p className="text-yellow-400 mb-4">🎮 Your opponent wants a rematch!</p>
-                <div className="flex gap-3 justify-center">
-                  <Button
-                    onClick={acceptRematch}
-                    disabled={isLoadingRematch}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                  >
-                    {isLoadingRematch ? 'Accepting...' : 'Accept'}
-                  </Button>
-                  <Button
-                    onClick={rejectRematch}
-                    disabled={isLoadingRematch}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                  >
-                    {isLoadingRematch ? 'Rejecting...' : 'Decline'}
-                  </Button>
-                </div>
-              </div>
-            )}
-            
-            {rematchStatus === 'accepted' && (
-              <div className="text-center">
-                <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
-                <p className="text-gray-400 text-sm">Redirecting to new match...</p>
-              </div>
-            )}
-            
-            {rematchStatus === 'rejected' && (
-              <div className="text-center">
-                <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
-                <Button
-                  onClick={() => {
-                    setRematchStatus('none')
-                  }}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-                >
-                  Request Again
-                </Button>
-              </div>
-            )}
+        {/* Countdown Display - Show before game */}
+        {gameState.status === 'countdown' && countdown !== null && localMatch.status !== 'waiting' && (
+          <div className="text-center space-y-4 mb-4">
+            <div className="text-6xl font-bold text-orange-400 mb-4 animate-pulse">
+              {countdown}
+            </div>
+            <div className="text-gray-400 text-lg">
+              Get ready!
+            </div>
+          </div>
+        )}
+
+        {/* Game Interface - Moved up to be more prominent, appears right after player info */}
+        {(gameState.status === 'playing' || gameState.status === 'completed' || gameState.status === 'countdown') && (
+          <div className="mb-4">
+            {renderGame()}
           </div>
         )}
 
@@ -1701,24 +1646,6 @@ export default function EnhancedMatchInterface({
         )}
 
 
-        {/* Countdown Display - Show regardless of match status */}
-        {gameState.status === 'countdown' && countdown !== null && localMatch.status !== 'waiting' && (
-          <div className="text-center space-y-4">
-            <div className="text-6xl font-bold text-orange-400 mb-4 animate-pulse">
-              {countdown}
-            </div>
-            <div className="text-gray-400 text-lg">
-              Get ready!
-            </div>
-          </div>
-        )}
-
-        {/* Game Interface */}
-        {(gameState.status === 'playing' || gameState.status === 'completed' || gameState.status === 'countdown') && (
-          <div>
-            {renderGame()}
-          </div>
-        )}
       </CardContent>
     </Card>
   )

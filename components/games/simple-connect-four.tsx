@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
@@ -21,6 +21,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [isLoading, setIsLoading] = useState(false)
   const [currentPlayer, setCurrentPlayer] = useState<'player1' | 'player2'>('player1')
   const [winner, setWinner] = useState<'player1' | 'player2' | 'draw' | null>(null)
+  const isProcessingMoveRef = useRef(false)
+  const boardRef = useRef<(string | null)[]>(Array(42).fill(null))
   const [playerNames, setPlayerNames] = useState<{player1: string, player2: string}>({player1: 'Player 1', player2: 'Player 2'})
   
   // Move history for viewing previous moves
@@ -79,6 +81,18 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         console.log('📝 Setting move history:', moveHistoryFromDB)
         setMoveHistory(moveHistoryFromDB)
         setHistoryReconstructed(true)
+        
+        // If board is empty, immediately set it from the last move in history
+        const currentBoard = boardRef.current || board
+        const boardIsEmpty = currentBoard.every(cell => cell === null)
+        if (boardIsEmpty && moveHistoryFromDB.length > 0) {
+          const finalBoard = moveHistoryFromDB[moveHistoryFromDB.length - 1].board
+          if (finalBoard && Array.isArray(finalBoard) && finalBoard.length === 42) {
+            console.log('✅ Immediately setting board from move history:', finalBoard)
+            setBoard(finalBoard)
+            boardRef.current = finalBoard
+          }
+        }
       } else {
         // No move history found, start with empty
         console.log('⚠️ No move history found in database')
@@ -122,6 +136,18 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     }
   }, [currentPlayer, currentStatus, winner]) // Removed viewingHistory from dependencies
 
+  // Reset processing flag when turn changes (safety measure)
+  useEffect(() => {
+    if (!isMyTurn) {
+      isProcessingMoveRef.current = false
+    }
+  }, [isMyTurn])
+
+  // Keep boardRef in sync with board state
+  useEffect(() => {
+    boardRef.current = board
+  }, [board])
+
   // Load move history when board changes (for opponent moves)
   useEffect(() => {
     if (board && historyReconstructed) {
@@ -130,22 +156,23 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     }
   }, [board, historyReconstructed])
 
-  // Load move history when viewing a completed match
+  // Load move history when viewing a completed or in_progress match (on initial load)
   useEffect(() => {
-    if (currentStatus === 'completed' && !historyReconstructed) {
-      console.log('🔄 Match is completed, loading move history...')
+    const boardIsEmpty = board.every(cell => cell === null)
+    if ((currentStatus === 'completed' || currentStatus === 'in_progress') && !historyReconstructed && boardIsEmpty) {
+      console.log('🔄 Match is', currentStatus, ', loading move history to restore board...')
       loadMoveHistoryFromDB()
     }
-  }, [currentStatus, historyReconstructed])
+  }, [currentStatus, historyReconstructed, board])
 
-  // When move history loads for completed matches, set board to final state
+  // When move history loads, set board to final state (for both in_progress and completed matches)
   useEffect(() => {
-    if (currentStatus === 'completed' && moveHistory.length > 0 && board.every(cell => cell === null)) {
-      console.log('🔄 Match completed with empty board, setting from move history...')
+    if (moveHistory.length > 0 && board.every(cell => cell === null)) {
       const finalBoard = moveHistory[moveHistory.length - 1].board
-      if (finalBoard && finalBoard.length === 42) {
-        console.log('✅ Setting board from final move history:', finalBoard)
+      if (finalBoard && Array.isArray(finalBoard) && finalBoard.length === 42) {
+        console.log('🔄 Setting board from move history (status:', currentStatus, '):', finalBoard)
         setBoard(finalBoard)
+        boardRef.current = finalBoard
       }
     }
   }, [moveHistory, currentStatus, board])
@@ -337,13 +364,15 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             const gameData = data.game_data
             
             // Update board if different, or if board is empty and we have game_data
-            if (gameData.board) {
+            if (gameData.board && Array.isArray(gameData.board) && gameData.board.length === 42) {
               const boardIsEmpty = board.every(cell => cell === null)
               const boardsAreDifferent = JSON.stringify(gameData.board) !== JSON.stringify(board)
               
-              if (boardsAreDifferent || (boardIsEmpty && gameData.board.length === 42)) {
-                console.log('🔄 Updating board from database:', gameData.board)
+              // Always load board if current board is empty OR if boards are different
+              if (boardIsEmpty || boardsAreDifferent) {
+                console.log('🔄 Updating board from database:', gameData.board, { boardIsEmpty, boardsAreDifferent })
                 setBoard(gameData.board)
+                boardRef.current = gameData.board
                 
                 // Load move history from database instead of reconstructing
                 if (!historyReconstructed) {
@@ -351,11 +380,14 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   loadMoveHistoryFromDB()
                 }
               }
-            } else if (data.status === 'completed') {
-              // If no board in game_data but match is completed, try loading from history
-              console.log('⚠️ No board in game_data for completed match, will load from history')
-              if (!historyReconstructed) {
-                loadMoveHistoryFromDB()
+            } else {
+              // If no board in game_data, try loading from history (for both in_progress and completed)
+              const boardIsEmpty = board.every(cell => cell === null)
+              if (boardIsEmpty && (data.status === 'completed' || data.status === 'in_progress')) {
+                console.log('⚠️ No board in game_data for', data.status, 'match, will load from history')
+                if (!historyReconstructed) {
+                  loadMoveHistoryFromDB()
+                }
               }
             }
             
@@ -460,7 +492,26 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
 
   // Game logic functions
   const dropPiece = async (column: number) => {
+    // Prevent multiple simultaneous moves - use ref for synchronous check
+    if (isProcessingMoveRef.current) {
+      console.log('❌ Move already in progress, ignoring click')
+      return
+    }
+    
     if (winner || currentStatus !== 'in_progress' || !isMyTurn) return
+    
+    // Set processing flag immediately (synchronously) to prevent multiple clicks
+    isProcessingMoveRef.current = true
+    
+    // Use ref to get the latest board state synchronously (prevents stale closure issues)
+    const currentBoard = boardRef.current
+    
+    // Additional safety check: verify column is not already full
+    if (currentBoard[column] !== null) {
+      console.log('❌ Column is already full (safety check):', column)
+      isProcessingMoveRef.current = false
+      return
+    }
     
     // Reset timer when a move is made
     setIsMoveTimerActive(false)
@@ -468,11 +519,12 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
     // Find the lowest available row in the column
     for (let row = 5; row >= 0; row--) {
       const index = row * 7 + column
-      if (board[index] === null) {
+      if (currentBoard[index] === null) {
         // Place the piece locally first for immediate feedback
-        const newBoard = [...board]
+        const newBoard = [...currentBoard]
         newBoard[index] = currentPlayer
         setBoard(newBoard)
+        boardRef.current = newBoard // Update ref immediately
         
         // Add move to history with proper move number
         const newMoveNumber = moveHistory.length + 1
@@ -518,7 +570,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           if (error) {
             console.error('Failed to save move to database:', error)
             // Revert local change if database save failed
-            setBoard(board)
+            setBoard(currentBoard)
+            boardRef.current = currentBoard
+            isProcessingMoveRef.current = false
             return
           }
           
@@ -550,7 +604,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         } catch (error) {
           console.error('Error saving move:', error)
           // Revert local change if database save failed
-          setBoard(board)
+          setBoard(currentBoard)
+          boardRef.current = currentBoard
+          isProcessingMoveRef.current = false
           return
         }
         
@@ -622,9 +678,18 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         
         // Switch players
         setCurrentPlayer(currentPlayer === 'player1' ? 'player2' : 'player1')
+        
+        // Reset processing flag after move is complete
+        // Use a small timeout to ensure state updates have propagated
+        setTimeout(() => {
+          isProcessingMoveRef.current = false
+        }, 50)
         return
       }
     }
+    
+    // Column is full - reset processing flag
+    isProcessingMoveRef.current = false
   }
 
   const checkWinner = (board: (string | null)[], row: number, col: number, player: string) => {
@@ -914,37 +979,11 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 relative p-4">
-      {/* Subtle gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
-      
+    <div className="bg-gray-950 relative">
       <div className="max-w-4xl mx-auto relative z-10">
-        <div className="bg-gray-900/80 rounded-lg p-6">          
-          {/* Match Info */}
-          <div className="bg-gray-800/80 rounded-lg p-4 mb-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-gray-300">Match ID: {matchId}</p>
-                <p className="text-gray-300">Status: {currentStatus}</p>
-                <p className="text-gray-300">Bet: {betAmount} tokens</p>
-              </div>
-              <div className={`px-3 py-1 rounded text-white ${
-                currentStatus === 'cancelled' ? 'bg-red-500' :
-                currentStatus === 'completed' ? 'bg-blue-500' :
-                currentStatus === 'in_progress' ? 'bg-green-500' :
-                'bg-yellow-500'
-              }`}>
-                {currentStatus === 'cancelled' ? 'Cancelled' :
-                 currentStatus === 'completed' ? 'Completed' :
-                 currentStatus === 'in_progress' ? 'In Progress' :
-                 'Waiting'}
-              </div>
-            </div>
-          </div>
-          
+        <div className="bg-gray-900/80 rounded-lg p-4">          
           {/* Four in a Row Game */}
-          <div className="bg-gray-800/80 rounded-lg p-6">
-            <h2 className="text-xl text-white mb-4 text-center">Four in a Row Game</h2>
+          <div className="bg-gray-800/80 rounded-lg p-4">
             <div className="text-center">
               {currentStatus === 'cancelled' ? (
                 <div className="text-red-400 mb-6">
@@ -1146,7 +1185,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               
               {/* Column arrows - placed right above the board */}
               {currentStatus === 'in_progress' && (
-                <div className="grid grid-cols-7 gap-1.5 sm:gap-2 md:gap-1 max-w-md mx-auto mb-2 mt-4">
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2 md:gap-1 max-w-md mx-auto mb-2 mt-2">
                   {Array.from({ length: 7 }, (_, col) => {
                     // Check if column is full
                     const isColumnFull = board[col] !== null
@@ -1222,7 +1261,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               </div>
               
               {/* Move History Viewer */}
-              <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+              <div className="mt-3 bg-gray-800/50 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-white">
                     Move History {moveHistory.length > 0 && <span className="text-blue-400 text-sm">({moveHistory.length} moves)</span>}
@@ -1327,7 +1366,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                     </div>
                   )}
                 </div>
-              
             </div>
           </div>
         </div>

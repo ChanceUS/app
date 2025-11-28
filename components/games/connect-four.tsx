@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,9 @@ export default function ConnectFour({
 }: ConnectFourProps) {
   const [board, setBoard] = useState<FourInARowBoard>(createEmptyBoard())
   const [gameWinner, setGameWinner] = useState<"player1" | "player2" | "draw" | null>(null)
+  const [isProcessingMove, setIsProcessingMove] = useState(false)
+  const isProcessingMoveRef = useRef(false)
+  const boardRef = useRef<FourInARowBoard>(board)
 
   // Debug props (only log when props change)
   useEffect(() => {
@@ -42,10 +45,18 @@ export default function ConnectFour({
   useEffect(() => {
     if (gameData?.board) {
       setBoard(gameData.board)
+      boardRef.current = gameData.board
     } else {
-      setBoard(createEmptyBoard())
+      const emptyBoard = createEmptyBoard()
+      setBoard(emptyBoard)
+      boardRef.current = emptyBoard
     }
   }, [gameData?.board])
+
+  // Keep boardRef in sync with board state
+  useEffect(() => {
+    boardRef.current = board
+  }, [board])
 
   // Check for winner when board changes
   useEffect(() => {
@@ -56,14 +67,29 @@ export default function ConnectFour({
     }
   }, [board, gameWinner, onGameEnd])
 
+  // Reset processing flag when turn changes (safety measure)
+  useEffect(() => {
+    if (!isMyTurn) {
+      setIsProcessingMove(false)
+      isProcessingMoveRef.current = false
+    }
+  }, [isMyTurn])
+
   const handleColumnClick = useCallback((column: number) => {
     console.log('🎯 Four in a Row column click:', {
       column,
       isActive,
       isMyTurn,
       gameWinner,
-      currentPlayer
+      currentPlayer,
+      isProcessingMove: isProcessingMoveRef.current
     })
+    
+    // Prevent multiple simultaneous moves - use ref for synchronous check
+    if (isProcessingMoveRef.current) {
+      console.log('❌ Move already in progress, ignoring click')
+      return
+    }
     
     if (!isActive || !isMyTurn || gameWinner) {
       console.log('❌ Four in a Row click blocked:', {
@@ -74,14 +100,32 @@ export default function ConnectFour({
       return
     }
 
-    const newBoard = dropPiece(board, column, currentPlayer)
+    // Set processing flag immediately (synchronously) to prevent multiple clicks
+    isProcessingMoveRef.current = true
+    setIsProcessingMove(true)
+
+    // Use ref to get the latest board state synchronously (prevents stale closure issues)
+    const currentBoard = boardRef.current
+    
+    // Additional safety check: verify column is not already full
+    if (currentBoard[0][column] !== "empty") {
+      console.log('❌ Column is already full (safety check):', column)
+      isProcessingMoveRef.current = false
+      setIsProcessingMove(false)
+      return
+    }
+    
+    const newBoard = dropPiece(currentBoard, column, currentPlayer)
     if (!newBoard) {
       console.log('❌ Column is full:', column)
+      isProcessingMoveRef.current = false
+      setIsProcessingMove(false)
       return // Column is full
     }
 
     // Update local state immediately for responsive UI
     setBoard(newBoard)
+    boardRef.current = newBoard // Update ref immediately
 
     // Send move to opponent through real-time system
     if (onMove) {
@@ -99,7 +143,15 @@ export default function ConnectFour({
       setGameWinner(winner)
       onGameEnd(winner)
     }
-  }, [isActive, isMyTurn, gameWinner, currentPlayer, board, onMove, onGameEnd])
+
+    // Reset processing flag after move is complete
+    // Use a small timeout to ensure the board state has fully updated
+    // This prevents the next click from reading stale state
+    setTimeout(() => {
+      isProcessingMoveRef.current = false
+      setIsProcessingMove(false)
+    }, 50)
+  }, [isActive, isMyTurn, gameWinner, currentPlayer, onMove, onGameEnd])
 
   const getCellColor = (cell: FourInARowCell) => {
     switch (cell) {
@@ -165,7 +217,7 @@ export default function ConnectFour({
           {/* Column buttons */}
           <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-4">
             {useMemo(() => Array.from({ length: 7 }, (_, col) => {
-              const isDisabled = !isActive || !isMyTurn || gameWinner !== null
+              const isDisabled = !isActive || !isMyTurn || gameWinner !== null || isProcessingMove
               return (
                 <Button
                   key={col}
@@ -176,7 +228,7 @@ export default function ConnectFour({
                   ↓
                 </Button>
               )
-            }), [isActive, isMyTurn, gameWinner, handleColumnClick])}
+            }), [isActive, isMyTurn, gameWinner, isProcessingMove, handleColumnClick])}
           </div>
 
           {/* Game board */}
