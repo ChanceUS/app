@@ -70,13 +70,29 @@ export async function joinMatchmakingQueue(
         return { error: "Failed to join priority match" }
       }
 
-      // Update the original match
+      // Update the original match with category if provided
+      const updateData: any = {
+        player2_id: user.id,
+        status: "waiting"
+      }
+      
+      // Add category to game_data if provided
+      if (category) {
+        const { data: existingMatch } = await supabase
+          .from("matches")
+          .select("game_data")
+          .eq("id", priorityMatch.original_match_id)
+          .single()
+        
+        updateData.game_data = {
+          ...(existingMatch?.game_data || {}),
+          category: category
+        }
+      }
+      
       const { error: matchUpdateError } = await supabase
         .from("matches")
-        .update({
-          player2_id: user.id,
-          status: "waiting"
-        })
+        .update(updateData)
         .eq("id", priorityMatch.original_match_id)
 
       if (matchUpdateError) {
@@ -140,8 +156,9 @@ export async function joinMatchmakingQueue(
     
     console.log(`🔍 All waiting queues with users:`, allQueuesWithUsers)
     
-    // Build query for matching queues - include category if provided
-    let queueQuery = supabase
+    // Find matching queues - match by game and bet amount
+    // Category will be stored in match's game_data when match is created
+    const { data: existingQueues, error: queueError } = await supabase
       .from("matchmaking_queue")
       .select("*")
       .eq("game_id", gameId)
@@ -149,13 +166,7 @@ export async function joinMatchmakingQueue(
       .eq("status", "waiting")
       .neq("user_id", user.id) // Can't match with yourself
       .gt("expires_at", new Date().toISOString()) // Still valid
-    
-    // Match by category if provided, or match queues without category
-    if (category) {
-      queueQuery = queueQuery.or(`category.eq.${category},category.is.null`)
-    }
-    
-    const { data: existingQueues, error: queueError } = await queueQuery.limit(1)
+      .limit(1)
 
     const existingQueue = existingQueues?.[0] || null
     console.log(`🔍 Queue search result:`, { existingQueue, queueError })
@@ -164,8 +175,10 @@ export async function joinMatchmakingQueue(
       // Found a match! Create a match for both players
       console.log(`🎯 Found existing queue entry, creating match!`, existingQueue)
       
-      // Get category from existing queue or use current category
-      const queueCategory = existingQueue.category || category
+      // Get category from queue metadata or use current category
+      // Since queue doesn't have category column, we'll use the current user's category
+      // Both players should have selected the same category to match
+      const matchCategory = category
       
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
@@ -175,7 +188,7 @@ export async function joinMatchmakingQueue(
           player2_id: user.id,
           bet_amount: betAmount,
           status: "waiting",
-          game_data: queueCategory ? { category: queueCategory } : {}
+          game_data: matchCategory ? { category: matchCategory } : {}
         })
         .select()
         .single()
@@ -284,8 +297,7 @@ export async function joinMatchmakingQueue(
         game_id: gameId,
         bet_amount: betAmount,
         match_type: matchType,
-        expires_at: expiresAt.toISOString(),
-        category: category || null
+        expires_at: expiresAt.toISOString()
       })
       .select(`
         *,
@@ -338,13 +350,15 @@ async function handleMatchmakingTimeout(queueId: string, supabase: any) {
     }
 
     // Create a regular match for the player
+    // Note: Category will be set when player2 joins via joinMatchmakingQueue
     const { data: matchData, error: matchError } = await supabase
       .from("matches")
       .insert({
         game_id: queueEntry.game_id,
         player1_id: queueEntry.user_id,
         bet_amount: queueEntry.bet_amount,
-        status: "waiting"
+        status: "waiting",
+        game_data: {}
       })
       .select()
       .single()
