@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Trophy, Timer, Brain, Users, CheckCircle } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import { 
   TriviaQuestion,
   TriviaAnswer,
@@ -41,6 +43,15 @@ export default function MultiplayerTriviaChallenge({
   const [myCurrentQuestionIndex, setMyCurrentQuestionIndex] = useState(0)
   const [bothPlayersReady, setBothPlayersReady] = useState(false)
   const [matchReady, setMatchReady] = useState(false)
+  
+  // Rematch state
+  const [isTournamentMatch, setIsTournamentMatch] = useState(false)
+  const [rematchStatus, setRematchStatus] = useState<'none' | 'requested' | 'received' | 'accepted' | 'rejected'>('none')
+  const [rematchRequestedBy, setRematchRequestedBy] = useState<string | null>(null)
+  const [isLoadingRematch, setIsLoadingRematch] = useState(false)
+  const [betAmount, setBetAmount] = useState(0)
+  const [gameId, setGameId] = useState<string | null>(null)
+  const router = useRouter()
   
   const isPlayer1 = currentUserId === player1Id
   
@@ -79,6 +90,67 @@ export default function MultiplayerTriviaChallenge({
       console.error('Error saving game state:', error)
     }
   }, [matchId])
+
+  // Load match data and check for tournament/rematch
+  useEffect(() => {
+    const loadMatchData = async () => {
+      try {
+        const supabase = createClient()
+        
+        // Load match data
+        const { data: matchData, error } = await supabase
+          .from('matches')
+          .select('bet_amount, game_id, game_data, status')
+          .eq('id', matchId)
+          .single()
+        
+        if (error) {
+          console.error('Error loading match data:', error)
+          return
+        }
+        
+        if (matchData) {
+          setBetAmount(matchData.bet_amount || 0)
+          setGameId(matchData.game_id)
+          
+          // Check if this is a tournament match
+          const { data: tournamentMatch } = await supabase
+            .from('tournament_matches')
+            .select('tournament_id')
+            .eq('match_id', matchId)
+            .single()
+          
+          if (tournamentMatch) {
+            setIsTournamentMatch(true)
+            console.log('🏆 This is a tournament match, rematch disabled')
+          }
+          
+          // Check for rematch requests if game is completed
+          if (matchData.status === 'completed' && !tournamentMatch) {
+            const gameData = matchData.game_data || {}
+            if (gameData.rematch_requested_by) {
+              const requestedBy = gameData.rematch_requested_by
+              if (requestedBy !== currentUserId) {
+                setRematchStatus('received')
+                setRematchRequestedBy(requestedBy)
+              } else {
+                setRematchStatus('requested')
+                setRematchRequestedBy(currentUserId)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading match data:', error)
+      }
+    }
+    
+    loadMatchData()
+    
+    // Poll for rematch updates every 2 seconds
+    const interval = setInterval(loadMatchData, 2000)
+    return () => clearInterval(interval)
+  }, [matchId, currentUserId])
 
   // Load game state from database
   useEffect(() => {
@@ -213,8 +285,9 @@ export default function MultiplayerTriviaChallenge({
     const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
     const nextQuestionIndex = currentPlayerAnswers.length
     
-    // Don't update question if player has finished
+    // Don't update question if player has finished - clear current question
     if (nextQuestionIndex >= TOTAL_QUESTIONS) {
+      setCurrentQuestion(null)
       return
     }
     
@@ -375,6 +448,152 @@ export default function MultiplayerTriviaChallenge({
     )
   }
 
+  // Rematch functions
+  const requestRematch = async () => {
+    if (!currentUserId || !player1Id || !player2Id || !gameId) return
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      // Check if there's already a rematch request
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('game_data')
+        .eq('id', matchId)
+        .single()
+      
+      if (matchData?.game_data?.rematch_requested_by) {
+        alert('A rematch request has already been sent for this match.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Store rematch request in matches table
+      const currentGameData = matchData?.game_data || {}
+      const { error: matchError } = await supabase
+        .from('matches')
+        .update({
+          game_data: {
+            ...currentGameData,
+            rematch_requested_by: currentUserId,
+            rematch_requested_at: new Date().toISOString()
+          }
+        })
+        .eq('id', matchId)
+      
+      if (matchError) {
+        console.error('Error storing rematch request:', matchError)
+        alert('Failed to request rematch. Please try again.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Also store in match_history as backup
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: matchId,
+          user_id: currentUserId,
+          action_type: 'rematch_requested',
+          action_data: {
+            requested_by: currentUserId,
+            requested_at: new Date().toISOString(),
+            original_match_id: matchId
+          }
+        })
+      
+      setRematchStatus('requested')
+      setRematchRequestedBy(currentUserId)
+    } catch (error) {
+      console.error('Error requesting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const acceptRematch = async () => {
+    if (!currentUserId || !player1Id || !player2Id || !gameId) {
+      alert('Missing player information. Cannot create rematch.')
+      return
+    }
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      // Create new match with same players and bet amount
+      const { data: newMatch, error: matchError } = await supabase
+        .from('matches')
+        .insert({
+          game_id: gameId,
+          player1_id: player1Id,
+          player2_id: player2Id,
+          bet_amount: betAmount,
+          status: 'in_progress',
+          started_at: new Date().toISOString(),
+          game_data: {}
+        })
+        .select()
+        .single()
+      
+      if (matchError || !newMatch) {
+        console.error('Error creating rematch:', matchError)
+        alert(`Failed to create rematch: ${matchError?.message || 'Unknown error'}`)
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Save rematch acceptance to match_history
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: matchId,
+          user_id: currentUserId,
+          action_type: 'rematch_accepted',
+          action_data: {
+            accepted_by: currentUserId,
+            new_match_id: newMatch.id,
+            accepted_at: new Date().toISOString()
+          }
+        })
+      
+      setRematchStatus('accepted')
+      router.replace(`/games/match/${newMatch.id}`)
+    } catch (error) {
+      console.error('Error accepting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const rejectRematch = async () => {
+    if (!currentUserId) return
+    
+    setIsLoadingRematch(true)
+    try {
+      const supabase = createClient()
+      
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: matchId,
+          user_id: currentUserId,
+          action_type: 'rematch_rejected',
+          action_data: {
+            rejected_by: currentUserId,
+            rejected_at: new Date().toISOString()
+          }
+        })
+      
+      setRematchStatus('rejected')
+    } catch (error) {
+      console.error('Error rejecting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
   // Show results if both players finished
   if (gameResult) {
     const myResult = isPlayer1 ? gameResult.player1Result : gameResult.player2Result
@@ -412,6 +631,78 @@ export default function MultiplayerTriviaChallenge({
               </div>
             </div>
           </div>
+          
+          {/* Rematch Request Section - Only show for non-tournament matches */}
+          {!isTournamentMatch && (
+            <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+              
+              {rematchStatus === 'none' && (
+                <div className="text-center">
+                  <p className="text-gray-300 mb-4">Want to play again?</p>
+                  <Button
+                    onClick={requestRematch}
+                    disabled={isLoadingRematch}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
+                  </Button>
+                  <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'requested' && (
+                <div className="text-center">
+                  <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
+                  <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'received' && (
+                <div className="text-center">
+                  <p className="text-yellow-400 mb-4">🎮 Your opponent wants a rematch!</p>
+                  <div className="flex gap-3 justify-center">
+                    <Button
+                      onClick={acceptRematch}
+                      disabled={isLoadingRematch}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      {isLoadingRematch ? 'Accepting...' : 'Accept'}
+                    </Button>
+                    <Button
+                      onClick={rejectRematch}
+                      disabled={isLoadingRematch}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      {isLoadingRematch ? 'Rejecting...' : 'Decline'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {rematchStatus === 'accepted' && (
+                <div className="text-center">
+                  <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
+                  <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'rejected' && (
+                <div className="text-center">
+                  <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                  <Button
+                    onClick={() => {
+                      setRematchStatus('none')
+                      setRematchRequestedBy(null)
+                    }}
+                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                  >
+                    Request Again
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -423,6 +714,7 @@ export default function MultiplayerTriviaChallenge({
   const myFinished = myAnswerCount >= TOTAL_QUESTIONS
   const opponentFinished = opponentAnswerCount >= TOTAL_QUESTIONS
   
+  // If player has finished, don't show questions anymore - show waiting screen or results
   if (myFinished && !opponentFinished) {
     const opponentName = isPlayer1 ? 'Player 2' : 'Player 1'
     return (
@@ -449,6 +741,24 @@ export default function MultiplayerTriviaChallenge({
       <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
         <CardContent className="py-12 text-center">
           <p className="text-gray-400">Waiting for game to start...</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Don't show questions if player has finished
+  if (myFinished) {
+    // If both finished, results should already be shown above
+    // If only this player finished, waiting screen should already be shown above
+    // This is a fallback to prevent showing questions
+    return (
+      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <CardContent className="py-12 text-center">
+          <Trophy className="h-16 w-16 text-orange-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">You've Finished!</h2>
+          <p className="text-gray-400">
+            Waiting for opponent to finish their questions...
+          </p>
         </CardContent>
       </Card>
     )

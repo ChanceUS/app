@@ -9,6 +9,7 @@ import StartGameButton from "@/components/games/start-game-button"
 import ChatWindow from "@/components/chat/chat-window"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ArrowLeft, Trophy, Users, Clock } from "lucide-react"
 import Link from "next/link"
 
@@ -23,6 +24,9 @@ export default function MatchPage({ params }: MatchPageProps) {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [matchId, setMatchId] = useState<string | null>(null)
+  const [rematchStatus, setRematchStatus] = useState<'none' | 'requested' | 'received' | 'accepted' | 'rejected'>('none')
+  const [isLoadingRematch, setIsLoadingRematch] = useState(false)
+  const [isTournamentMatch, setIsTournamentMatch] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -144,6 +148,185 @@ export default function MatchPage({ params }: MatchPageProps) {
       supabase.removeChannel(channel)
     }
   }, [matchId, router, supabase])
+
+  // Load rematch status and tournament check
+  useEffect(() => {
+    if (!match || !user) return
+
+    const loadRematchData = async () => {
+      try {
+        // Check if this is a tournament match
+        const { data: tournamentMatch } = await supabase
+          .from('tournament_matches')
+          .select('tournament_id')
+          .eq('match_id', match.id)
+          .single()
+        
+        if (tournamentMatch) {
+          setIsTournamentMatch(true)
+          return
+        }
+
+        // Check for rematch requests if match is completed
+        if (match.status === 'completed') {
+          const gameData = match.game_data || {}
+          if (gameData.rematch_requested_by) {
+            const requestedBy = gameData.rematch_requested_by
+            if (requestedBy !== user.id) {
+              setRematchStatus('received')
+            } else {
+              setRematchStatus('requested')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading rematch data:', error)
+      }
+    }
+
+    loadRematchData()
+    const interval = setInterval(loadRematchData, 2000)
+    return () => clearInterval(interval)
+  }, [match, user, supabase])
+
+  // Rematch functions
+  const requestRematch = async () => {
+    if (!user || !match || !match.player1_id || !match.player2_id || !match.game_id) return
+    
+    setIsLoadingRematch(true)
+    try {
+      // Check if there's already a rematch request
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('game_data')
+        .eq('id', match.id)
+        .single()
+      
+      if (matchData?.game_data?.rematch_requested_by) {
+        alert('A rematch request has already been sent for this match.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Store rematch request in matches table
+      const currentGameData = matchData?.game_data || {}
+      const { error: matchError } = await supabase
+        .from('matches')
+        .update({
+          game_data: {
+            ...currentGameData,
+            rematch_requested_by: user.id,
+            rematch_requested_at: new Date().toISOString()
+          }
+        })
+        .eq('id', match.id)
+      
+      if (matchError) {
+        console.error('Error storing rematch request:', matchError)
+        alert('Failed to request rematch. Please try again.')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Also store in match_history as backup
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: match.id,
+          user_id: user.id,
+          action_type: 'rematch_requested',
+          action_data: {
+            requested_by: user.id,
+            requested_at: new Date().toISOString(),
+            original_match_id: match.id
+          }
+        })
+      
+      setRematchStatus('requested')
+    } catch (error) {
+      console.error('Error requesting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const acceptRematch = async () => {
+    if (!user || !match || !match.player1_id || !match.player2_id || !match.game_id) {
+      alert('Missing player information. Cannot create rematch.')
+      return
+    }
+    
+    setIsLoadingRematch(true)
+    try {
+      // Create new match with same players and bet amount
+      const { data: newMatch, error: matchError } = await supabase
+        .from('matches')
+        .insert({
+          game_id: match.game_id,
+          player1_id: match.player1_id,
+          player2_id: match.player2_id,
+          bet_amount: match.bet_amount,
+          status: 'in_progress',
+          started_at: new Date().toISOString(),
+          game_data: {}
+        })
+        .select()
+        .single()
+      
+      if (matchError || !newMatch) {
+        console.error('Error creating rematch:', matchError)
+        alert(`Failed to create rematch: ${matchError?.message || 'Unknown error'}`)
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      // Save rematch acceptance to match_history
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: match.id,
+          user_id: user.id,
+          action_type: 'rematch_accepted',
+          action_data: {
+            accepted_by: user.id,
+            new_match_id: newMatch.id,
+            accepted_at: new Date().toISOString()
+          }
+        })
+      
+      setRematchStatus('accepted')
+      router.replace(`/games/match/${newMatch.id}`)
+    } catch (error) {
+      console.error('Error accepting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
+
+  const rejectRematch = async () => {
+    if (!user) return
+    
+    setIsLoadingRematch(true)
+    try {
+      await supabase
+        .from('match_history')
+        .insert({
+          match_id: match.id,
+          user_id: user.id,
+          action_type: 'rematch_rejected',
+          action_data: {
+            rejected_by: user.id,
+            rejected_at: new Date().toISOString()
+          }
+        })
+      
+      setRematchStatus('rejected')
+    } catch (error) {
+      console.error('Error rejecting rematch:', error)
+    } finally {
+      setIsLoadingRematch(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -350,6 +533,81 @@ export default function MatchPage({ params }: MatchPageProps) {
               )}
             </div>
           </div>
+        )}
+
+        {/* Rematch Section - Show above game interface when match is completed */}
+        {match.status === "completed" && !isTournamentMatch && isInMatch && (
+          <Card className="bg-gray-900/50 border-blue-500/20 mb-6">
+            <CardContent className="pt-6">
+              <div className="text-center space-y-4">
+                <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+                
+                {rematchStatus === 'none' && (
+                  <div>
+                    <p className="text-gray-300 mb-4">Want to play again?</p>
+                    <Button
+                      onClick={requestRematch}
+                      disabled={isLoadingRematch}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
+                    </Button>
+                    <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                  </div>
+                )}
+                
+                {rematchStatus === 'requested' && (
+                  <div>
+                    <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
+                    <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                  </div>
+                )}
+                
+                {rematchStatus === 'received' && (
+                  <div>
+                    <p className="text-yellow-400 mb-4">🎮 Your opponent wants a rematch!</p>
+                    <div className="flex gap-3 justify-center">
+                      <Button
+                        onClick={acceptRematch}
+                        disabled={isLoadingRematch}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      >
+                        {isLoadingRematch ? 'Accepting...' : 'Accept'}
+                      </Button>
+                      <Button
+                        onClick={rejectRematch}
+                        disabled={isLoadingRematch}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      >
+                        {isLoadingRematch ? 'Rejecting...' : 'Decline'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {rematchStatus === 'accepted' && (
+                  <div>
+                    <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
+                    <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                  </div>
+                )}
+                
+                {rematchStatus === 'rejected' && (
+                  <div>
+                    <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                    <Button
+                      onClick={() => {
+                        setRematchStatus('none')
+                      }}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                    >
+                      Request Again
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Game Interface and Chat */}
