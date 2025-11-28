@@ -428,9 +428,22 @@ export function checkWinner(board: FourInARowBoard): "player1" | "player2" | "dr
     }
   }
 
-  // Check for draw
+  // Check for draw - if board is full, determine winner by piece count
   const isFull = board.every((row) => row.every((cell) => cell !== "empty"))
-  if (isFull) return "draw"
+  if (isFull) {
+    // Count pieces for each player
+    let player1Count = 0
+    let player2Count = 0
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col < 7; col++) {
+        if (board[row][col] === "player1") player1Count++
+        else if (board[row][col] === "player2") player2Count++
+      }
+    }
+    // Player with more pieces wins (in Connect Four, players alternate, so counts should be close)
+    // If still tied, player1 wins by default (ensures no ties)
+    return player1Count >= player2Count ? "player1" : "player2"
+  }
 
   return null
 }
@@ -1079,9 +1092,32 @@ export function calculateMultiplayerResult(gameState: MultiplayerGameState): Mul
       winReason = 'time'
       console.log(`🏆 Winner: Player 2 (Faster Time: ${player2Result.totalTime.toFixed(1)}s vs ${player1Result.totalTime.toFixed(1)}s)`)
     } else {
-      winner = 'draw'
-      winReason = 'composite'
-      console.log('🤝 Result: Draw (All factors tied)')
+      // Final tiebreaker: Use problems solved count (more problems = winner)
+      if (player1Result.problemsSolved > player2Result.problemsSolved) {
+        winner = 'player1'
+        winReason = 'composite'
+        console.log(`🏆 Winner: Player 1 (More Problems Solved: ${player1Result.problemsSolved} vs ${player2Result.problemsSolved})`)
+      } else if (player2Result.problemsSolved > player1Result.problemsSolved) {
+        winner = 'player2'
+        winReason = 'composite'
+        console.log(`🏆 Winner: Player 2 (More Problems Solved: ${player2Result.problemsSolved} vs ${player1Result.problemsSolved})`)
+      } else {
+        // Ultimate tiebreaker: Use streak (longer streak = winner)
+        if (player1Result.streak > player2Result.streak) {
+          winner = 'player1'
+          winReason = 'composite'
+          console.log(`🏆 Winner: Player 1 (Longer Streak: ${player1Result.streak} vs ${player2Result.streak})`)
+        } else if (player2Result.streak > player1Result.streak) {
+          winner = 'player2'
+          winReason = 'composite'
+          console.log(`🏆 Winner: Player 2 (Longer Streak: ${player2Result.streak} vs ${player1Result.streak})`)
+        } else {
+          // Absolute last resort: Player 1 wins by default (ensures no ties)
+          winner = 'player1'
+          winReason = 'composite'
+          console.log('🏆 Winner: Player 1 (Default - All factors tied, Player 1 wins by default)')
+        }
+      }
     }
   }
   

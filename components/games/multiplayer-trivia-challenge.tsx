@@ -404,9 +404,32 @@ export default function MultiplayerTriviaChallenge({
         totalTime: p2TotalTime,
         averageTime: state.player2Answers.length > 0 ? p2TotalTime / state.player2Answers.length : 0
       },
-      winner: state.player1Score > state.player2Score ? 'player1' 
-        : state.player2Score > state.player1Score ? 'player2' 
-        : 'draw'
+      winner: (() => {
+        // Primary: Score comparison
+        if (state.player1Score > state.player2Score) return 'player1'
+        if (state.player2Score > state.player1Score) return 'player2'
+        
+        // Tiebreaker 1: Accuracy
+        const p1Accuracy = state.player1Answers.length > 0 ? (p1Correct / state.player1Answers.length) * 100 : 0
+        const p2Accuracy = state.player2Answers.length > 0 ? (p2Correct / state.player2Answers.length) * 100 : 0
+        if (p1Accuracy > p2Accuracy) return 'player1'
+        if (p2Accuracy > p1Accuracy) return 'player2'
+        
+        // Tiebreaker 2: Total time (faster wins)
+        if (p1TotalTime < p2TotalTime) return 'player1'
+        if (p2TotalTime < p1TotalTime) return 'player2'
+        
+        // Tiebreaker 3: More correct answers
+        if (p1Correct > p2Correct) return 'player1'
+        if (p2Correct > p1Correct) return 'player2'
+        
+        // Tiebreaker 4: More questions answered
+        if (state.player1Answers.length > state.player2Answers.length) return 'player1'
+        if (state.player2Answers.length > state.player1Answers.length) return 'player2'
+        
+        // Ultimate tiebreaker: Player 1 wins by default (ensures no ties)
+        return 'player1'
+      })()
     }
   }
 

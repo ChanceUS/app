@@ -1891,7 +1891,7 @@ export default function MultiplayerMathBlitz({
             totalTime: gameState.player2Answers.reduce((sum, a) => sum + a.timeSpent, 0),
             streak: 0
           },
-          winner: 'draw' as const,
+          winner: 'player1' as const, // Default to player1 if calculation fails (no ties allowed)
           winReason: 'score' as const
         }
         console.log('🔄 Using fallback result in results display:', fallbackResult)

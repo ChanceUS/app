@@ -386,8 +386,33 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               console.log('🏆 Setting winner to player2')
               setWinner('player2')
             } else if (!data.winner_id) {
-              console.log('🤝 Setting winner to draw')
-              setWinner('draw')
+              // If no winner_id but match is completed, determine winner from board
+              // This handles cases where old matches had draws
+              if (data.game_data?.board) {
+                const board = data.game_data.board
+                // Convert to format for checkWinner
+                const formattedBoard: ("player1" | "player2" | "empty")[][] = []
+                for (let row = 0; row < 6; row++) {
+                  formattedBoard[row] = []
+                  for (let col = 0; col < 7; col++) {
+                    const cell = board[row * 7 + col]
+                    formattedBoard[row][col] = cell === 'player1' ? 'player1' : cell === 'player2' ? 'player2' : 'empty'
+                  }
+                }
+                const determinedWinner = checkWinner(formattedBoard)
+                if (determinedWinner && determinedWinner !== 'draw') {
+                  console.log(`🏆 Setting winner to ${determinedWinner} (from board analysis)`)
+                  setWinner(determinedWinner)
+                } else {
+                  // Fallback: Player 1 wins by default
+                  console.log('🏆 Setting winner to player1 (default - no winner_id found)')
+                  setWinner('player1')
+                }
+              } else {
+                // Fallback: Player 1 wins by default
+                console.log('🏆 Setting winner to player1 (default - no winner_id found)')
+                setWinner('player1')
+              }
             }
           }
         }
@@ -556,29 +581,41 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           return
         }
         
-        // Check for draw
+        // Check for board full - determine winner by piece count (no draws allowed)
         if (newBoard.every(cell => cell !== null)) {
-          setWinner('draw')
-          setCurrentStatus('completed') // Update local status immediately
-          // Save draw and mark match as completed
+          // Count pieces for each player
+          let player1Count = 0
+          let player2Count = 0
+          for (let i = 0; i < newBoard.length; i++) {
+            if (newBoard[i] === 'player1') player1Count++
+            else if (newBoard[i] === 'player2') player2Count++
+          }
+          
+          // Player with more pieces wins (in Connect Four, players alternate, so counts should be close)
+          // If still tied, player1 wins by default (ensures no ties)
+          const fullBoardWinner: 'player1' | 'player2' = player1Count >= player2Count ? 'player1' : 'player2'
+          
+          setWinner(fullBoardWinner)
+          setCurrentStatus('completed')
+          // Save winner and mark match as completed
           try {
             const supabase = createClient()
             await supabase
               .from('matches')
               .update({
                 status: 'completed',
-                winner_id: null, // No winner in a draw
+                winner_id: fullBoardWinner === 'player1' ? player1Id : player2Id,
                 completed_at: new Date().toISOString(),
                 game_data: {
                   board: newBoard,
                   currentPlayer: currentPlayer,
-                  winner: 'draw'
+                  winner: fullBoardWinner
                 }
               })
               .eq('id', matchId)
-            console.log('✅ Match completed as draw and saved to database')
+            console.log(`✅ Match completed - ${fullBoardWinner} wins (board full, P1: ${player1Count} pieces, P2: ${player2Count} pieces)`)
           } catch (error) {
-            console.error('Error saving draw:', error)
+            console.error('Error saving winner:', error)
           }
           return
         }
