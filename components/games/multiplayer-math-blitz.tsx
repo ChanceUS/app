@@ -825,6 +825,17 @@ export default function MultiplayerMathBlitz({
       return
     }
     
+    // Check if player is finished - don't update problem if finished
+    const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
+    const isFinished = currentPlayerAnswers.length >= gameState.problems.length || 
+                       (isPlayer1 ? gameState.player1Finished : gameState.player2Finished)
+    
+    if (isFinished) {
+      console.log('✅ Player finished, not updating problem')
+      setCurrentProblem(null) // Clear problem to show finished screen
+      return
+    }
+    
     const problem = gameState.problems[myCurrentProblemIndex]
     console.log('📋 Found problem:', { index: myCurrentProblemIndex, question: problem?.question, isDifferent: problem !== currentProblem })
     
@@ -842,7 +853,7 @@ export default function MultiplayerMathBlitz({
       } else {
       console.log('⚠️ Problem not found at index:', myCurrentProblemIndex)
     }
-  }, [myCurrentProblemIndex, gameState?.problems])
+  }, [myCurrentProblemIndex, gameState?.problems, gameState?.player1Answers, gameState?.player2Answers, gameState?.player1Finished, gameState?.player2Finished, isPlayer1, currentProblem])
   
   // Always clear localAnswerSubmitted when problem changes
   useEffect(() => {
@@ -1034,6 +1045,16 @@ export default function MultiplayerMathBlitz({
       return
     }
 
+    // Check if player is already finished - don't allow more answers
+    const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
+    const isAlreadyFinished = currentPlayerAnswers.length >= gameState.problems.length || 
+                              (isPlayer1 ? gameState.player1Finished : gameState.player2Finished)
+    
+    if (isAlreadyFinished) {
+      console.log('⚠️ Player already finished, ignoring answer')
+      return
+    }
+    
     if (localAnswerSubmitted) {
       console.log('⚠️ Already submitting answer, ignoring')
       return
@@ -1042,7 +1063,6 @@ export default function MultiplayerMathBlitz({
     console.log('🎯 ANSWERING NOW:', { answer, problemIndex: myCurrentProblemIndex, playerId })
     
     // Check if myCurrentProblemIndex is out of sync
-    const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
     if (currentPlayerAnswers.length > 0 && myCurrentProblemIndex === 0) {
       console.log('🔧 SYNC ISSUE: myCurrentProblemIndex is 0 but have', currentPlayerAnswers.length, 'answers. Fixing...')
       setMyCurrentProblemIndex(currentPlayerAnswers.length)
@@ -1125,7 +1145,32 @@ export default function MultiplayerMathBlitz({
     const myAnswers = isPlayer1 ? newGameState.player1Answers : newGameState.player2Answers
     const isFinished = myAnswers.length >= gameState.problems.length
     
-    // Move to next problem
+    // Check if finished FIRST - before trying to move to next problem
+    if (isFinished) {
+      // Player is finished - set finished state and clear current problem
+      const finishedState = {
+        ...newGameState,
+        [isPlayer1 ? 'player1Finished' : 'player2Finished']: true
+      }
+      setGameState(finishedState)
+      saveGameStateToDatabase(finishedState)
+      setCurrentProblem(null) // Clear current problem to show finished screen
+      setLocalAnswerSubmitted(false) // Reset to allow UI updates
+      
+      // Check if both done
+      const p1Done = finishedState.player1Answers.length >= gameState.problems.length
+      const p2Done = finishedState.player2Answers.length >= gameState.problems.length
+      
+      if (p1Done && p2Done && !gameResult) {
+        const result = calculateMultiplayerResult(finishedState)
+        setGameResult(result)
+        saveGameStateToDatabase(finishedState, result)
+        onGameComplete?.(result.winner)
+      }
+      return // Exit early - don't try to move to next problem
+    }
+    
+    // Move to next problem (only if not finished)
     const nextIndex = myAnswers.length
     console.log(`⏭️ Moving to problem ${nextIndex + 1}, current: ${myCurrentProblemIndex}`)
     
@@ -1139,20 +1184,12 @@ export default function MultiplayerMathBlitz({
         console.log('✅ Updating to problem:', newGameState.problems[nextIndex].question)
         setCurrentProblem(newGameState.problems[nextIndex])
         setTimeRemaining(newGameState.problems[nextIndex].timeLimit)
-    setLocalAnswerSubmitted(false)
+        setLocalAnswerSubmitted(false)
       } else {
         console.log('❌ Problem not found at index:', nextIndex)
+        setLocalAnswerSubmitted(false) // Reset even if problem not found
       }
     }, 200)
-    
-    // Check if finished
-    if (isFinished) {
-      const finishedState = {
-        ...newGameState,
-        [isPlayer1 ? 'player1Finished' : 'player2Finished']: true
-      }
-      setGameState(finishedState)
-      saveGameStateToDatabase(finishedState)
       
       // Check if both done
       const p1Done = finishedState.player1Answers.length >= gameState.problems.length
@@ -2036,8 +2073,8 @@ export default function MultiplayerMathBlitz({
                   })
                   handleAnswer(option)
                 }}
-                className="h-16 text-xl font-bold bg-gray-800 hover:bg-gray-700 border-gray-700 text-white"
-                disabled={localAnswerSubmitted}
+                className="h-16 text-xl font-bold bg-gray-800 hover:bg-gray-700 border-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={localAnswerSubmitted || !currentProblem || (isPlayer1 ? gameState.player1Finished : gameState.player2Finished)}
               >
                 {option}
               </Button>
