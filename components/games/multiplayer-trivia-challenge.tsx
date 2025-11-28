@@ -46,6 +46,8 @@ export default function MultiplayerTriviaChallenge({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categorySelected, setCategorySelected] = useState(false)
   const [hasExistingGameState, setHasExistingGameState] = useState(false)
+  const answerSubmittedRef = useRef(false)
+  const timerActiveRef = useRef(false)
   
   // Rematch state
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
@@ -254,12 +256,11 @@ export default function MultiplayerTriviaChallenge({
           }
         } else if (!gameState) {
           // Only initialize if we don't have any state yet
-          // If category is required but not selected, wait
-          // For existing matches without category, allow loading without category
-          const hasExistingGameData = matchData?.game_data && Object.keys(matchData.game_data).length > 0
+          // Get category from match data directly (more reliable than state)
+          const categoryFromMatch = matchData?.game_data?.category || selectedCategory
           
           // If this is a new match and no category selected, wait for category selection
-          if (!hasExistingGameData && !categorySelected) {
+          if (!categoryFromMatch && !categorySelected) {
             return
           }
           
@@ -267,18 +268,34 @@ export default function MultiplayerTriviaChallenge({
           const questions: TriviaQuestion[] = []
           const usedQuestionIds = new Set<string>()
           
+          console.log(`🎯 Loading questions for category: ${categoryFromMatch || 'All Categories'}`)
+          
           for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-            let q = await getRandomTriviaQuestionFromDB(undefined, selectedCategory || undefined)
+            let q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
             let attempts = 0
             // Prevent duplicate questions - check both by question text and ID if available
             while (q && (usedQuestionIds.has(q.question) || questions.some(existing => existing.question === q.question)) && attempts < 20) {
-              q = await getRandomTriviaQuestionFromDB(undefined, selectedCategory || undefined)
+              q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
               attempts++
             }
             
             if (q) {
-              usedQuestionIds.add(q.question)
-              questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
+              // Verify the question matches the selected category
+              if (categoryFromMatch && q.category !== categoryFromMatch) {
+                console.warn(`Question category mismatch: expected ${categoryFromMatch}, got ${q.category}, retrying...`)
+                // Retry with category filter
+                q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch)
+                attempts++
+                if (q && q.category !== categoryFromMatch) {
+                  console.error(`Failed to get question for category ${categoryFromMatch}, skipping`)
+                  continue
+                }
+              }
+              
+              if (q) {
+                usedQuestionIds.add(q.question)
+                questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
+              }
             } else {
               // If question failed to load, skip it
               console.warn(`Failed to load question ${i + 1}, skipping`)
@@ -296,7 +313,15 @@ export default function MultiplayerTriviaChallenge({
             }
           }
           
-          console.log(`Loaded ${questions.length} questions for game with category: ${selectedCategory || 'All Categories'}`)
+          console.log(`✅ Loaded ${questions.length} questions for game with category: ${categoryFromMatch || 'All Categories'}`)
+          
+          // Verify all questions are from the correct category
+          if (categoryFromMatch) {
+            const wrongCategoryQuestions = questions.filter(q => q.category !== categoryFromMatch)
+            if (wrongCategoryQuestions.length > 0) {
+              console.error(`⚠️ Warning: ${wrongCategoryQuestions.length} questions don't match category ${categoryFromMatch}`)
+            }
+          }
           
           const initialState: MultiplayerTriviaState = {
             questions,
@@ -319,14 +344,14 @@ export default function MultiplayerTriviaChallenge({
             
             // Save initial state
             await saveGameStateToDatabase(initialState)
-            // Also save category to match data if selected
-            if (selectedCategory) {
+            // Also save category to match data if we have it
+            if (categoryFromMatch) {
               await supabase
                 .from('matches')
                 .update({
                   game_data: {
                     ...matchData?.game_data,
-                    category: selectedCategory
+                    category: categoryFromMatch
                   }
                 })
                 .eq('id', matchId)
@@ -370,6 +395,8 @@ export default function MultiplayerTriviaChallenge({
         setCurrentQuestion(question)
         setTimeRemaining(question.timeLimit || QUESTION_TIME_LIMIT)
         setLocalAnswerSubmitted(false)
+        answerSubmittedRef.current = false
+        timerActiveRef.current = false
         setMyCurrentQuestionIndex(nextQuestionIndex)
       }
     }
@@ -377,24 +404,51 @@ export default function MultiplayerTriviaChallenge({
 
   // Timer countdown
   useEffect(() => {
-    if (!matchReady || !currentQuestion || timeRemaining <= 0 || gameResult) return
+    if (!matchReady || !currentQuestion || gameResult) {
+      timerActiveRef.current = false
+      return
+    }
+    
+    // Reset timer and flags when question changes
+    setTimeRemaining(currentQuestion.timeLimit || QUESTION_TIME_LIMIT)
+    answerSubmittedRef.current = false
+    timerActiveRef.current = true
     
     const timer = setInterval(() => {
+      // Check if answer was already submitted
+      if (answerSubmittedRef.current || !timerActiveRef.current) {
+        return
+      }
+      
       setTimeRemaining(prev => {
         if (prev <= 1) {
-          handleAnswer(-1) // Timeout
+          // Timeout - submit no answer only if not already submitted
+          if (!answerSubmittedRef.current && timerActiveRef.current) {
+            answerSubmittedRef.current = true
+            timerActiveRef.current = false
+            handleAnswer(-1) // Timeout
+          }
           return 0
         }
         return prev - 1
       })
     }, 1000)
     
-    return () => clearInterval(timer)
-  }, [matchReady, currentQuestion, timeRemaining, gameResult])
+    return () => {
+      clearInterval(timer)
+      timerActiveRef.current = false
+    }
+  }, [matchReady, currentQuestion, gameResult, handleAnswer])
 
   // Handle answer submission
-  const handleAnswer = async (selectedAnswerIndex: number) => {
-    if (!currentQuestion || !gameState || localAnswerSubmitted) return
+  const handleAnswer = useCallback(async (selectedAnswerIndex: number) => {
+    // Use refs to check submission status synchronously
+    if (answerSubmittedRef.current) {
+      console.log('Answer already submitted, ignoring')
+      return
+    }
+    
+    if (!currentQuestion || !gameState) return
     if (gameState.player1Finished && isPlayer1) return
     if (gameState.player2Finished && !isPlayer1) return
     
@@ -405,6 +459,9 @@ export default function MultiplayerTriviaChallenge({
       return
     }
     
+    // Mark as submitted immediately to prevent duplicate submissions
+    answerSubmittedRef.current = true
+    timerActiveRef.current = false
     setLocalAnswerSubmitted(true)
     
     const startTime = Date.now() - (QUESTION_TIME_LIMIT - timeRemaining) * 1000
@@ -452,7 +509,7 @@ export default function MultiplayerTriviaChallenge({
     }
     
     // Question will update automatically via useEffect when state changes
-  }
+  }, [currentQuestion, gameState, isPlayer1, timeRemaining, saveGameStateToDatabase, onGameComplete])
 
   // Calculate trivia result
   const calculateTriviaResult = (state: MultiplayerTriviaState): TriviaResult => {
