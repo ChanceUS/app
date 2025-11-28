@@ -116,6 +116,7 @@ export default function SignUpForm() {
                 required
                 className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#FFA500] focus:ring-[#FFA500]/20 rounded-lg h-12"
               />
+              <p className="text-xs text-gray-500">Your unique gaming identity</p>
             </div>
             <div className="space-y-2">
               <label htmlFor="displayName" className="block text-sm font-medium text-gray-300">
@@ -126,8 +127,24 @@ export default function SignUpForm() {
                 name="displayName"
                 type="text"
                 placeholder="Champion Player"
+                required
                 className="bg-gray-900 border-gray-700 text-white placeholder:text-gray-500 focus:border-[#FFA500] focus:ring-[#FFA500]/20 rounded-lg h-12"
               />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="avatar" className="block text-sm font-medium text-gray-300">
+                Profile Picture
+              </label>
+              <div className="flex justify-center">
+                <Input
+                  id="avatar"
+                  name="avatar"
+                  type="file"
+                  accept="image/*"
+                  className="bg-gray-900 border-gray-700 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FFA500] file:text-black hover:file:bg-[#FF8C00] cursor-pointer px-3 py-2 w-full"
+                />
+              </div>
+              <p className="text-xs text-gray-500 text-center">Upload a profile picture (optional)</p>
             </div>
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-300">

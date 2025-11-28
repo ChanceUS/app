@@ -72,17 +72,19 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
                 {(user.display_name || user.username).charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <h3 className="text-white font-semibold">Profile Picture</h3>
-              <p className="text-gray-400 text-sm">Upload a new avatar to personalize your profile</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2 border-gray-700 text-gray-300 hover:text-white bg-transparent"
-              >
-                Change Avatar
-              </Button>
+            <div className="flex-1">
+              <h3 className="text-white font-semibold mb-1">Profile Picture</h3>
+              <p className="text-gray-400 text-sm mb-3">Upload a new avatar to personalize your profile</p>
+              <div className="flex justify-center">
+                <Input
+                  id="avatar"
+                  name="avatar"
+                  type="file"
+                  accept="image/*"
+                  className="bg-gray-800/50 border-gray-700 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-black hover:file:bg-cyan-600 cursor-pointer px-3 py-2 w-full"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1 text-center">Max file size: 5MB</p>
             </div>
           </div>
 
@@ -114,6 +116,7 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
                 required
                 className="bg-gray-800/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-cyan-500 focus:ring-cyan-500/20 rounded-lg h-12"
               />
+              <p className="text-xs text-gray-500">Your unique gaming identity</p>
             </div>
 
             <div className="space-y-2">

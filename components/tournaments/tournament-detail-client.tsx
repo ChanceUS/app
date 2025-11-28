@@ -14,6 +14,7 @@ import Link from "next/link"
 import type { Tournament, TournamentParticipant, TournamentMatch } from "@/lib/tournament-actions"
 import TournamentBracket from "./tournament-bracket"
 import TournamentAutoAdvance from "./tournament-auto-advance"
+import ChatWindow from "@/components/chat/chat-window"
 
 interface TournamentDetailClientProps {
   tournament: Tournament
@@ -366,6 +367,11 @@ export default function TournamentDetailClient({
           <TabsTrigger value="matches" className="text-white data-[state=active]:bg-orange-500">
             Matches
           </TabsTrigger>
+          {isRegistered && (
+            <TabsTrigger value="chat" className="text-white data-[state=active]:bg-orange-500">
+              Chat
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="bracket" className="mt-6">
@@ -586,6 +592,18 @@ export default function TournamentDetailClient({
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isRegistered && (
+          <TabsContent value="chat" className="mt-6">
+            <ChatWindow
+              messageType="tournament"
+              currentUser={currentUser as any}
+              tournamentId={tournament.id}
+              title="Tournament Chat"
+              maxHeight="600px"
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

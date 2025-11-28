@@ -4,6 +4,7 @@ import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { getCallbackUrl, getDashboardUrl } from "./config"
+import { uploadProfilePicture } from "./upload-utils"
 
 // Sign in action
 export async function signIn(prevState: any, formData: FormData) {
@@ -93,30 +94,46 @@ export async function signUp(prevState: any, formData: FormData) {
   const password = formData.get("password")
   const username = formData.get("username")
   const displayName = formData.get("displayName")
+  const avatarFile = formData.get("avatar") as File | null
 
   // Validate required fields
-  if (!email || !password || !username) {
-    return { error: "Email, password, and username are required" }
+  if (!email || !password || !username || !displayName) {
+    return { error: "Email, password, username, and display name are required" }
   }
 
   const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
 
   try {
-    const { error } = await supabase.auth.signUp({
+    // First, create the user account
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: email.toString(),
       password: password.toString(),
       options: {
         emailRedirectTo: getDashboardUrl(),
         data: {
           username: username.toString(),
-          display_name: displayName?.toString() || username.toString(),
+          display_name: displayName.toString(),
         },
       },
     })
 
-    if (error) {
-      return { error: error.message }
+    if (signUpError) {
+      return { error: signUpError.message }
+    }
+
+    // If user was created and avatar file is provided, upload it
+    let avatarUrl: string | null = null
+    if (signUpData.user && avatarFile && avatarFile.size > 0) {
+      avatarUrl = await uploadProfilePicture(avatarFile, signUpData.user.id)
+      
+      // Update user profile with avatar URL
+      if (avatarUrl) {
+        await supabase
+          .from("users")
+          .update({ avatar_url: avatarUrl })
+          .eq("id", signUpData.user.id)
+      }
     }
 
     return { success: "Check your email to confirm your account and start gaming!" }

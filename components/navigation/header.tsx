@@ -83,6 +83,12 @@ export default function Header({ user }: HeaderProps) {
               >
                 Tournaments
               </Link>
+              <Link
+                href="/chat"
+                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
+              >
+                Chat
+              </Link>
             </nav>
           )}
 

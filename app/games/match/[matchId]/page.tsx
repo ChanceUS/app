@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import Header from "@/components/navigation/header"
 import EnhancedMatchInterface from "@/components/games/enhanced-match-interface"
 import StartGameButton from "@/components/games/start-game-button"
+import ChatWindow from "@/components/chat/chat-window"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Trophy, Users, Clock } from "lucide-react"
@@ -338,22 +339,40 @@ export default function MatchPage({ params }: MatchPageProps) {
           </div>
         )}
 
-        {/* Game Interface */}
-        <EnhancedMatchInterface
-          match={match}
-          currentUser={user}
-          onMatchComplete={async (winnerId) => {
-            console.log('🏁 Match completed, winner:', winnerId)
-            
-            // If this is a tournament match, redirect to tournament page after a delay
-            if ((match as any)?.tournament_id) {
-              console.log('🏆 Tournament match completed, redirecting to tournament...')
-              setTimeout(() => {
-                router.push(`/tournaments/${(match as any).tournament_id}`)
-              }, 3000) // 3 second delay to show results
-            }
-          }}
-        />
+        {/* Game Interface and Chat */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Game Interface - Takes 2 columns on large screens */}
+          <div className="lg:col-span-2">
+            <EnhancedMatchInterface
+              match={match}
+              currentUser={user}
+              onMatchComplete={async (winnerId) => {
+                console.log('🏁 Match completed, winner:', winnerId)
+                
+                // If this is a tournament match, redirect to tournament page after a delay
+                if ((match as any)?.tournament_id) {
+                  console.log('🏆 Tournament match completed, redirecting to tournament...')
+                  setTimeout(() => {
+                    router.push(`/tournaments/${(match as any).tournament_id}`)
+                  }, 3000) // 3 second delay to show results
+                }
+              }}
+            />
+          </div>
+
+          {/* Match Chat - Takes 1 column on large screens */}
+          {isInMatch && match.player2_id && (
+            <div className="lg:col-span-1">
+              <ChatWindow
+                messageType="match"
+                currentUser={user}
+                matchId={match.id}
+                title="Match Chat"
+                maxHeight="600px"
+              />
+            </div>
+          )}
+        </div>
 
         {/* Match Actions */}
         {match.status === "waiting" && !isInMatch && (

@@ -1101,7 +1101,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               
               {/* Column arrows - placed right above the board */}
               {currentStatus === 'in_progress' && (
-                <div className="grid grid-cols-7 gap-2 max-w-md mx-auto mb-2 mt-4">
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2 md:gap-1 max-w-md mx-auto mb-2 mt-4">
                   {Array.from({ length: 7 }, (_, col) => {
                     // Check if column is full
                     const isColumnFull = board[col] !== null
@@ -1112,7 +1112,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         key={col}
                         onClick={() => dropPiece(col)}
                         disabled={!canPlay}
-                        className={`h-8 md:h-12 text-white text-sm md:text-xl rounded font-bold transition-colors flex items-center justify-center ${
+                        className={`h-7 sm:h-8 md:h-12 text-white text-xs sm:text-sm md:text-xl rounded font-bold transition-colors flex items-center justify-center ${
                           canPlay
                             ? 'bg-blue-600 hover:bg-blue-500 cursor-pointer'
                             : 'bg-gray-500 cursor-not-allowed opacity-50'
@@ -1125,7 +1125,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                 </div>
               )}
               
-              <div className="grid grid-cols-7 gap-2 sm:gap-2 md:gap-1 max-w-md mx-auto">
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2 md:gap-1 max-w-md mx-auto">
                 {Array.from({ length: 7 }, (_, col) => {
                   const canPlay = isMyTurn && !winner && currentStatus === 'in_progress' && !viewingHistory
                   
@@ -1134,7 +1134,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       key={col}
                       onClick={() => dropPiece(col)}
                       disabled={!canPlay}
-                      className={`flex flex-col gap-2 md:gap-1 p-1 rounded transition-colors ${
+                      className={`flex flex-col gap-1.5 sm:gap-2 md:gap-1 p-0.5 sm:p-1 rounded transition-colors ${
                         canPlay
                           ? 'hover:bg-blue-500/10 cursor-pointer'
                           : 'cursor-not-allowed'
@@ -1161,7 +1161,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         return (
                           <div
                             key={i}
-                            className={`w-9 h-9 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
+                            className={`w-7 h-7 sm:w-9 sm:h-9 md:w-12 md:h-12 rounded-full border-2 transition-all duration-300 ${pieceColor} ${
                               currentStatus === 'cancelled' 
                                 ? 'opacity-50' 
                                 : viewingHistory 

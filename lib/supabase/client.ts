@@ -28,6 +28,7 @@ export interface User {
   username: string
   email: string
   display_name?: string
+  gamertag?: string
   avatar_url?: string
   tokens: number
   total_games_played: number
@@ -78,4 +79,19 @@ export interface MatchHistory {
   action_type: string
   action_data?: any
   timestamp: string
+}
+
+export interface Message {
+  id: string
+  sender_id: string
+  content: string
+  message_type: "match" | "global" | "dm" | "tournament"
+  match_id?: string
+  tournament_id?: string
+  recipient_id?: string
+  is_read: boolean
+  created_at: string
+  // Joined data
+  sender?: User
+  recipient?: User
 }

@@ -3,6 +3,7 @@
 import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { uploadProfilePicture, deleteProfilePicture } from "./upload-utils"
 
 // Update user profile
 export async function updateProfile(prevState: any, formData: FormData) {
@@ -12,6 +13,7 @@ export async function updateProfile(prevState: any, formData: FormData) {
 
   const displayName = formData.get("displayName")
   const username = formData.get("username")
+  const avatarFile = formData.get("avatar") as File | null
 
   if (!displayName || !username) {
     return { error: "Display name and username are required" }
@@ -29,6 +31,13 @@ export async function updateProfile(prevState: any, formData: FormData) {
       return { error: "User not authenticated" }
     }
 
+    // Get current user profile to check for existing avatar
+    const { data: currentUser } = await supabase
+      .from("users")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .single()
+
     // Check if username is already taken (excluding current user)
     const { data: existingUser } = await supabase
       .from("users")
@@ -41,12 +50,30 @@ export async function updateProfile(prevState: any, formData: FormData) {
       return { error: "Username is already taken" }
     }
 
+    // Handle profile picture upload if provided
+    let avatarUrl = currentUser?.avatar_url || null
+    if (avatarFile && avatarFile.size > 0) {
+      // Delete old avatar if it exists
+      if (currentUser?.avatar_url) {
+        await deleteProfilePicture(currentUser.avatar_url)
+      }
+
+      // Upload new avatar
+      const newAvatarUrl = await uploadProfilePicture(avatarFile, user.id)
+      if (newAvatarUrl) {
+        avatarUrl = newAvatarUrl
+      } else {
+        return { error: "Failed to upload profile picture. Please try again." }
+      }
+    }
+
     // Update user profile
     const { error: updateError } = await supabase
       .from("users")
       .update({
         display_name: displayName.toString(),
         username: username.toString(),
+        avatar_url: avatarUrl,
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id)
@@ -58,6 +85,7 @@ export async function updateProfile(prevState: any, formData: FormData) {
 
     revalidatePath("/profile")
     revalidatePath("/settings")
+    revalidatePath("/dashboard")
     return { success: "Profile updated successfully!" }
   } catch (error) {
     console.error("Update profile error:", error)

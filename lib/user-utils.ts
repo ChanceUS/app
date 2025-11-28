@@ -39,6 +39,7 @@ export async function getCompleteUserData(): Promise<User | null> {
     username: authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'user',
     email: authUser.email || '',
     display_name: authUser.user_metadata?.display_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+    gamertag: authUser.user_metadata?.gamertag || null,
     avatar_url: authUser.user_metadata?.avatar_url || null,
     tokens: 1000, // Default starting tokens
     total_games_played: 0,
