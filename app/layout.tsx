@@ -44,6 +44,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7434250143961922"
+          crossOrigin="anonymous"
+        ></script>
         <style>{`
           :root {
             --font-sans: ${poppins.style.fontFamily}, ui-sans-serif, system-ui, sans-serif;
