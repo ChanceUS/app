@@ -130,6 +130,10 @@ export default function MatchPage({ params }: MatchPageProps) {
         async (payload) => {
           console.log('🔄 Match updated via real-time:', payload.new)
           const updatedMatch = payload.new as any
+          // Preserve games relation if it exists in current match
+          if (match?.games) {
+            updatedMatch.games = match.games
+          }
           setMatch(updatedMatch)
 
           // If match completed and it's a tournament match, redirect to tournament
@@ -394,7 +398,7 @@ export default function MatchPage({ params }: MatchPageProps) {
               <div>
                 <CardTitle className="text-white text-2xl flex items-center">
                   <Trophy className="mr-3 h-6 w-6 text-orange-400" />
-                  {match.games?.name} Match
+                  {match.games?.name || 'Math Blitz'} Match
                 </CardTitle>
                 <p className="text-gray-400 mt-2">Match #{match.id.slice(0, 8)}</p>
               </div>
@@ -533,81 +537,6 @@ export default function MatchPage({ params }: MatchPageProps) {
               )}
             </div>
           </div>
-        )}
-
-        {/* Rematch Section - Show above game interface when match is completed */}
-        {match.status === "completed" && !isTournamentMatch && isInMatch && (
-          <Card className="bg-gray-900/50 border-blue-500/20 mb-6">
-            <CardContent className="pt-6">
-              <div className="text-center space-y-4">
-                <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
-                
-                {rematchStatus === 'none' && (
-                  <div>
-                    <p className="text-gray-300 mb-4">Want to play again?</p>
-                    <Button
-                      onClick={requestRematch}
-                      disabled={isLoadingRematch}
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                    >
-                      {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
-                    </Button>
-                    <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
-                  </div>
-                )}
-                
-                {rematchStatus === 'requested' && (
-                  <div>
-                    <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
-                    <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
-                  </div>
-                )}
-                
-                {rematchStatus === 'received' && (
-                  <div>
-                    <p className="text-yellow-400 mb-4">🎮 Your opponent wants a rematch!</p>
-                    <div className="flex gap-3 justify-center">
-                      <Button
-                        onClick={acceptRematch}
-                        disabled={isLoadingRematch}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                      >
-                        {isLoadingRematch ? 'Accepting...' : 'Accept'}
-                      </Button>
-                      <Button
-                        onClick={rejectRematch}
-                        disabled={isLoadingRematch}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                      >
-                        {isLoadingRematch ? 'Rejecting...' : 'Decline'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                
-                {rematchStatus === 'accepted' && (
-                  <div>
-                    <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
-                    <p className="text-gray-400 text-sm">Redirecting to new match...</p>
-                  </div>
-                )}
-                
-                {rematchStatus === 'rejected' && (
-                  <div>
-                    <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
-                    <Button
-                      onClick={() => {
-                        setRematchStatus('none')
-                      }}
-                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-                    >
-                      Request Again
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         )}
 
         {/* Game Interface and Chat */}
