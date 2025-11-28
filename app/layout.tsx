@@ -4,6 +4,7 @@ import { Poppins, Open_Sans, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import ClientInit from "./client-init"
 import { Toaster } from "@/components/ui/toaster"
+import FloatingFeedbackButton from "@/components/feedback/floating-feedback-button"
 
 // Fonts
 const poppins = Poppins({
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ClientInit /> {/* ensures window.supabase is set */}
         {children}
         <Toaster />
+        <FloatingFeedbackButton />
       </body>
     </html>
   )
