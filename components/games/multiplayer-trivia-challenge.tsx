@@ -43,6 +43,8 @@ export default function MultiplayerTriviaChallenge({
   const [myCurrentQuestionIndex, setMyCurrentQuestionIndex] = useState(0)
   const [bothPlayersReady, setBothPlayersReady] = useState(false)
   const [matchReady, setMatchReady] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [categorySelected, setCategorySelected] = useState(false)
   
   // Rematch state
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
@@ -175,6 +177,15 @@ export default function MultiplayerTriviaChallenge({
         
         console.log('🔄 Match data retrieved:', { hasGameData: !!matchData?.game_data?.gameState })
         
+        // Load category from match data (either selected by this player or opponent)
+        const category = matchData?.game_data?.category
+        if (category) {
+          if (!selectedCategory) {
+            setSelectedCategory(category)
+          }
+          setCategorySelected(true)
+        }
+        
         if (matchData?.game_data?.gameState) {
           const loadedState = matchData.game_data.gameState as MultiplayerTriviaState
           console.log('🔄 Loaded trivia game state from database:', {
@@ -184,34 +195,33 @@ export default function MultiplayerTriviaChallenge({
             p2Score: loadedState.player2Score
           })
           
-          // Always update state if there are any changes (not just progress)
-          const hasChanges = !gameState || 
-            loadedState.player1Answers.length !== gameState.player1Answers.length || 
-            loadedState.player2Answers.length !== gameState.player2Answers.length ||
-            loadedState.player1Score !== gameState.player1Score ||
-            loadedState.player2Score !== gameState.player2Score ||
-            loadedState.player1Finished !== gameState.player1Finished ||
-            loadedState.player2Finished !== gameState.player2Finished
+          // Use a ref to track previous state to avoid unnecessary updates
+          setGameState(prevState => {
+            if (!prevState) {
+              return loadedState
+            }
             
-          console.log('🔄 Should update state?', {
-            hasGameState: !!gameState,
-            p1Progress: loadedState.player1Answers.length,
-            p2Progress: loadedState.player2Answers.length,
-            hasChanges
+            // Only update if there are actual changes
+            const hasChanges = 
+              loadedState.player1Answers.length !== prevState.player1Answers.length || 
+              loadedState.player2Answers.length !== prevState.player2Answers.length ||
+              loadedState.player1Score !== prevState.player1Score ||
+              loadedState.player2Score !== prevState.player2Score ||
+              loadedState.player1Finished !== prevState.player1Finished ||
+              loadedState.player2Finished !== prevState.player2Finished
+            
+            if (hasChanges) {
+              // Set player's current question index
+              const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+              console.log('✅ Updating player question index to:', myAnswers.length)
+              setMyCurrentQuestionIndex(myAnswers.length)
+              return loadedState
+            }
+            
+            return prevState
           })
           
-          if (hasChanges) {
-            setGameState(loadedState)
-            
-            // Set player's current question index
-            const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-            console.log('✅ Updating player question index to:', myAnswers.length)
-            setMyCurrentQuestionIndex(myAnswers.length)
-          } else {
-            console.log('⏭️ Skipping state update - no changes detected')
-          }
-          
-          // Check if both finished - always check for finalResult, even if state didn't change
+          // Check if both finished - always check for finalResult
           if (loadedState.player1Finished && loadedState.player2Finished) {
             // If finalResult exists in database, use it
             if (matchData.game_data.finalResult) {
@@ -236,13 +246,32 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
           }
-        } else if (!gameState) {
-          // Only initialize if we don't have any state yet
-          // Initialize new game
+        } else if (!gameState && categorySelected) {
+          // Only initialize if we don't have any state yet AND category is selected
+          // Initialize new game - only if we're the first player to initialize
+          // Check if opponent has already initialized
+          const categorySelectedBy = matchData?.game_data?.category_selected_by
+          const isFirstPlayer = !categorySelectedBy || categorySelectedBy === currentUserId
+          
+          if (!isFirstPlayer) {
+            // Wait for opponent to initialize
+            return
+          }
+          
           const questions: TriviaQuestion[] = []
+          const usedQuestionIds = new Set<string>()
+          
           for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-            const q = await getRandomTriviaQuestionFromDB()
+            let q = await getRandomTriviaQuestionFromDB(undefined, selectedCategory || undefined)
+            let attempts = 0
+            // Prevent duplicate questions - check both by question text and ID if available
+            while (q && (usedQuestionIds.has(q.question) || questions.some(existing => existing.question === q.question)) && attempts < 20) {
+              q = await getRandomTriviaQuestionFromDB(undefined, selectedCategory || undefined)
+              attempts++
+            }
+            
             if (q) {
+              usedQuestionIds.add(q.question)
               questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
             } else {
               // If question failed to load, skip it
@@ -261,7 +290,7 @@ export default function MultiplayerTriviaChallenge({
             }
           }
           
-          console.log(`Loaded ${questions.length} questions for game`)
+          console.log(`Loaded ${questions.length} questions for game with category: ${selectedCategory}`)
           
           const initialState: MultiplayerTriviaState = {
             questions,
@@ -282,8 +311,18 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
             
-            // Save initial state
+            // Save initial state with category
             await saveGameStateToDatabase(initialState)
+            // Also save category to match data
+            await supabase
+              .from('matches')
+              .update({
+                game_data: {
+                  ...matchData?.game_data,
+                  category: selectedCategory
+                }
+              })
+              .eq('id', matchId)
           }
         }
       } catch (error) {
@@ -291,12 +330,15 @@ export default function MultiplayerTriviaChallenge({
       }
     }
     
-    loadGameState()
-    
-    // Poll for updates every 500ms for better real-time sync
-    const interval = setInterval(loadGameState, 500)
-    return () => clearInterval(interval)
-  }, [matchId, isPlayer1, player1Id, player2Id, saveGameStateToDatabase, gameState])
+    // Only load if category is selected or already exists in match
+    if (categorySelected || gameState) {
+      loadGameState()
+      
+      // Poll for updates every 500ms for better real-time sync
+      const interval = setInterval(loadGameState, 500)
+      return () => clearInterval(interval)
+    }
+  }, [matchId, isPlayer1, player1Id, player2Id, saveGameStateToDatabase, categorySelected, selectedCategory])
 
   // Update current question when index changes
   useEffect(() => {
@@ -308,19 +350,24 @@ export default function MultiplayerTriviaChallenge({
     
     // Don't update question if player has finished - clear current question
     if (nextQuestionIndex >= TOTAL_QUESTIONS) {
-      setCurrentQuestion(null)
+      if (currentQuestion) {
+        setCurrentQuestion(null)
+      }
       return
     }
     
     // Set the current question based on the player's answer count
     if (nextQuestionIndex < gameState.questions.length) {
       const question = gameState.questions[nextQuestionIndex]
-      setCurrentQuestion(question)
-      setTimeRemaining(question.timeLimit || QUESTION_TIME_LIMIT)
-      setLocalAnswerSubmitted(false)
-      setMyCurrentQuestionIndex(nextQuestionIndex)
+      // Only update if the question actually changed to prevent flickering
+      if (!currentQuestion || currentQuestion.question !== question.question || myCurrentQuestionIndex !== nextQuestionIndex) {
+        setCurrentQuestion(question)
+        setTimeRemaining(question.timeLimit || QUESTION_TIME_LIMIT)
+        setLocalAnswerSubmitted(false)
+        setMyCurrentQuestionIndex(nextQuestionIndex)
+      }
     }
-  }, [isPlayer1 ? gameState?.player1Answers?.length : gameState?.player2Answers?.length, gameState, isPlayer1])
+  }, [isPlayer1 ? gameState?.player1Answers?.length : gameState?.player2Answers?.length, gameState?.questions, isPlayer1, myCurrentQuestionIndex])
 
   // Timer countdown
   useEffect(() => {
@@ -903,12 +950,86 @@ export default function MultiplayerTriviaChallenge({
     )
   }
 
+  // Show category selection if not selected yet
+  if (!categorySelected && !gameState) {
+    const categories = [
+      { name: 'Pop Culture', value: 'Pop Culture' },
+      { name: 'Animals', value: 'Animals' },
+      { name: 'General Knowledge', value: 'General Knowledge' },
+      { name: 'Science', value: 'Science' },
+      { name: 'History', value: 'History' },
+      { name: 'Sports', value: 'Sports' }
+    ]
+    
+    const handleCategorySelect = async (category: string) => {
+      setSelectedCategory(category)
+      setCategorySelected(true)
+      
+      // Save category to match data
+      try {
+        const supabase = createClient()
+        const { data: matchData } = await supabase
+          .from('matches')
+          .select('game_data')
+          .eq('id', matchId)
+          .single()
+        
+        await supabase
+          .from('matches')
+          .update({
+            game_data: {
+              ...matchData?.game_data,
+              category: category,
+              category_selected_by: currentUserId
+            }
+          })
+          .eq('id', matchId)
+      } catch (error) {
+        console.error('Error saving category:', error)
+      }
+    }
+    
+    return (
+      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <CardHeader>
+          <CardTitle className="text-center text-white flex items-center justify-center gap-2">
+            <Brain className="h-6 w-6 text-orange-500" />
+            Select Trivia Category
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-gray-400 text-center mb-6">
+            Choose a category for your trivia challenge. Both players will answer questions from this category.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {categories.map((cat) => (
+              <Button
+                key={cat.value}
+                onClick={() => handleCategorySelect(cat.value)}
+                className="h-20 bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 hover:border-orange-500 transition-colors"
+                variant="outline"
+              >
+                {cat.name}
+              </Button>
+            ))}
+          </div>
+          <p className="text-gray-500 text-sm text-center mt-4">
+            Waiting for category selection...
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Show main game
   if (!matchReady) {
     return (
       <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
         <CardContent className="py-12 text-center">
           <p className="text-gray-400">Waiting for game to start...</p>
+          {selectedCategory && (
+            <p className="text-gray-500 text-sm mt-2">Category: {selectedCategory}</p>
+          )}
         </CardContent>
       </Card>
     )
