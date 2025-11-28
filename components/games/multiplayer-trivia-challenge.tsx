@@ -211,11 +211,24 @@ export default function MultiplayerTriviaChallenge({
             console.log('⏭️ Skipping state update - no changes detected')
           }
           
-          // Check if both finished to show results
-          if (loadedState.player1Finished && loadedState.player2Finished && matchData.game_data.finalResult) {
-            setGameResult(matchData.game_data.finalResult)
-            setMatchReady(true)
-            return
+          // Check if both finished - always check for finalResult, even if state didn't change
+          if (loadedState.player1Finished && loadedState.player2Finished) {
+            // If finalResult exists in database, use it
+            if (matchData.game_data.finalResult) {
+              console.log('✅ Loading finalResult from database')
+              setGameResult(matchData.game_data.finalResult)
+              setMatchReady(true)
+              return
+            } else {
+              // If both finished but no finalResult yet, calculate it
+              console.log('✅ Both players finished, calculating result from loaded state...')
+              const result = calculateTriviaResult(loadedState)
+              setGameResult(result)
+              // Save it to database so the other player can see it
+              await saveGameStateToDatabase(loadedState, result)
+              setMatchReady(true)
+              return
+            }
           }
           
           // Check if match is ready
@@ -413,35 +426,53 @@ export default function MultiplayerTriviaChallenge({
         averageTime: state.player2Answers.length > 0 ? p2TotalTime / state.player2Answers.length : 0
       },
       winner: (() => {
-        // Primary: Score comparison
-        if (state.player1Score > state.player2Score) return 'player1'
-        if (state.player2Score > state.player1Score) return 'player2'
-        
-        // Tiebreaker 1: Accuracy
+        // Calculate accuracies
         const p1Accuracy = state.player1Answers.length > 0 ? (p1Correct / state.player1Answers.length) * 100 : 0
         const p2Accuracy = state.player2Answers.length > 0 ? (p2Correct / state.player2Answers.length) * 100 : 0
+        
+        // Primary: Accuracy (higher accuracy wins)
         if (p1Accuracy > p2Accuracy) return 'player1'
         if (p2Accuracy > p1Accuracy) return 'player2'
         
-        // Tiebreaker 2: Total time (faster wins)
+        // Tiebreaker 1: Total time (faster wins - lower time is better)
         if (p1TotalTime < p2TotalTime) return 'player1'
         if (p2TotalTime < p1TotalTime) return 'player2'
         
-        // Tiebreaker 3: More correct answers
+        // Tiebreaker 2: Average time per question (faster average wins)
+        const p1AvgTime = state.player1Answers.length > 0 ? p1TotalTime / state.player1Answers.length : 0
+        const p2AvgTime = state.player2Answers.length > 0 ? p2TotalTime / state.player2Answers.length : 0
+        if (p1AvgTime < p2AvgTime) return 'player1'
+        if (p2AvgTime < p1AvgTime) return 'player2'
+        
+        // Tiebreaker 3: Score (as additional tiebreaker)
+        if (state.player1Score > state.player2Score) return 'player1'
+        if (state.player2Score > state.player1Score) return 'player2'
+        
+        // Tiebreaker 4: More correct answers
         if (p1Correct > p2Correct) return 'player1'
         if (p2Correct > p1Correct) return 'player2'
         
-        // Tiebreaker 4: More questions answered
+        // Tiebreaker 5: More questions answered
         if (state.player1Answers.length > state.player2Answers.length) return 'player1'
         if (state.player2Answers.length > state.player1Answers.length) return 'player2'
         
-        // Ultimate tiebreaker: Player 1 wins by default (ensures no ties)
+        // Ultimate tiebreaker: Compare by earliest answer timestamp (who answered first question faster)
+        // This ensures no ties even in the most extreme case
+        if (state.player1Answers.length > 0 && state.player2Answers.length > 0) {
+          const p1FirstAnswerTime = state.player1Answers[0]?.timestamp || 0
+          const p2FirstAnswerTime = state.player2Answers[0]?.timestamp || 0
+          if (p1FirstAnswerTime < p2FirstAnswerTime) return 'player1'
+          if (p2FirstAnswerTime < p1FirstAnswerTime) return 'player2'
+        }
+        
+        // Final fallback: Player 1 wins (should never reach here, but ensures no ties)
         return 'player1'
       })()
     }
   }
 
   // Continuous check for completion (polling-based)
+  // Note: This is a backup check. The main check happens in loadGameState
   const completionCheckedRef = useRef(false)
   useEffect(() => {
     if (!gameState || gameResult || completionCheckedRef.current) return
@@ -451,7 +482,7 @@ export default function MultiplayerTriviaChallenge({
       const p2Finished = gameState.player2Answers.length >= TOTAL_QUESTIONS
       
       if (p1Finished && p2Finished && !gameResult) {
-        console.log('✅ Both players finished, calculating result...')
+        console.log('✅ Both players finished (backup check), calculating result...')
         completionCheckedRef.current = true // Prevent multiple calls
         const result = calculateTriviaResult(gameState)
         setGameResult(result)
