@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -411,8 +411,9 @@ export default function MultiplayerTriviaChallenge({
   }
 
   // Continuous check for completion (polling-based)
+  const completionCheckedRef = useRef(false)
   useEffect(() => {
-    if (!gameState || gameResult) return
+    if (!gameState || gameResult || completionCheckedRef.current) return
     
     const checkCompletion = async () => {
       const p1Finished = gameState.player1Answers.length >= TOTAL_QUESTIONS
@@ -420,6 +421,7 @@ export default function MultiplayerTriviaChallenge({
       
       if (p1Finished && p2Finished && !gameResult) {
         console.log('✅ Both players finished, calculating result...')
+        completionCheckedRef.current = true // Prevent multiple calls
         const result = calculateTriviaResult(gameState)
         setGameResult(result)
         await saveGameStateToDatabase(gameState, result)

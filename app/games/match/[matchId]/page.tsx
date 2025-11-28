@@ -171,6 +171,24 @@ export default function MatchPage({ params }: MatchPageProps) {
           return
         }
 
+        // Check for rematch acceptance - if opponent accepted, redirect to new match
+        const { data: rematchHistory } = await supabase
+          .from('match_history')
+          .select('action_data')
+          .eq('match_id', match.id)
+          .eq('action_type', 'rematch_accepted')
+          .order('timestamp', { ascending: false })
+          .limit(1)
+          .single()
+        
+        if (rematchHistory?.action_data?.new_match_id) {
+          const newMatchId = rematchHistory.action_data.new_match_id
+          console.log('🎮 Rematch accepted! Redirecting to new match:', newMatchId)
+          setRematchStatus('accepted')
+          router.replace(`/games/match/${newMatchId}`)
+          return
+        }
+
         // Check for rematch requests if match is completed
         if (match.status === 'completed') {
           const gameData = match.game_data || {}
@@ -191,7 +209,7 @@ export default function MatchPage({ params }: MatchPageProps) {
     loadRematchData()
     const interval = setInterval(loadRematchData, 2000)
     return () => clearInterval(interval)
-  }, [match, user, supabase])
+  }, [match, user, supabase, router])
 
   // Rematch functions
   const requestRematch = async () => {

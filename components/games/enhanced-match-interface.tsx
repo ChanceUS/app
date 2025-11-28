@@ -52,6 +52,8 @@ export default function EnhancedMatchInterface({
     gameData: match.game_data || {}
   })
   const [opponent, setOpponent] = useState<User | null>(null)
+  const [player1Data, setPlayer1Data] = useState<User | null>(null)
+  const [player2Data, setPlayer2Data] = useState<User | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [countdownInterval, setCountdownInterval] = useState<NodeJS.Timeout | null>(null)
   const [timeLeft, setTimeLeft] = useState<number>(0)
@@ -60,6 +62,7 @@ export default function EnhancedMatchInterface({
   const [localMatch, setLocalMatch] = useState(match) // Local copy of match data for real-time updates
   const [game, setGame] = useState<Game | null>(null)
   const gameStateTransitionedRef = useRef(false)
+  const gameCompletionRef = useRef(false) // Track if game completion has been processed
   
   // Rematch state
   const [rematchStatus, setRematchStatus] = useState<'none' | 'requested' | 'received' | 'accepted' | 'rejected'>('none')
@@ -662,17 +665,35 @@ export default function EnhancedMatchInterface({
         }
       }
 
-      // Fetch opponent data
+      // Fetch both players' data
+      if (match.player1_id) {
+        const { data: p1Data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', match.player1_id)
+          .single()
+        if (p1Data) setPlayer1Data(p1Data)
+      }
+
+      if (match.player2_id) {
+        const { data: p2Data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', match.player2_id)
+          .single()
+        if (p2Data) setPlayer2Data(p2Data)
+      }
+
+      // Fetch opponent data for backward compatibility
       const opponentId = isPlayer1 ? match.player2_id : match.player1_id
-      if (!opponentId) return
-
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', opponentId)
-        .single()
-
-      if (data) setOpponent(data)
+      if (opponentId) {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', opponentId)
+          .single()
+        if (data) setOpponent(data)
+      }
     }
 
     initializeGameState()
@@ -957,6 +978,15 @@ export default function EnhancedMatchInterface({
 
   // Handle game completion
   const handleGameComplete = useCallback(async (winner: 'player1' | 'player2' | 'draw') => {
+    // Prevent multiple calls
+    if (gameCompletionRef.current) {
+      console.log('⚠️ Game completion already processed, ignoring duplicate call')
+      return
+    }
+    
+    // Mark as processing
+    gameCompletionRef.current = true
+    
     try {
       console.log('🎮 Game completed, winner:', winner)
       
@@ -1465,7 +1495,7 @@ export default function EnhancedMatchInterface({
             <div className="text-center">
               <div className="text-sm text-gray-400 mb-1">Player 1</div>
               <div className="text-white font-medium">
-                {isPlayer1 ? 'You' : opponent?.display_name || 'Waiting...'}
+                {isPlayer1 ? 'You' : (player1Data?.display_name || player1Data?.username || 'Waiting...')}
               </div>
               {isPlayer1 && <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>}
             </div>
@@ -1474,7 +1504,7 @@ export default function EnhancedMatchInterface({
             <div className="text-center">
               <div className="text-sm text-gray-400 mb-1">Player 2</div>
               <div className="text-white font-medium">
-                {isPlayer2 ? 'You' : (localMatch.player2_id ? 'Joined' : 'Waiting...')}
+                {isPlayer2 ? 'You' : (localMatch.player2_id ? (player2Data?.display_name || player2Data?.username || 'Joined') : 'Waiting...')}
               </div>
               {isPlayer2 && <Badge className="mt-2 bg-orange-500/20 text-orange-400">You</Badge>}
             </div>
