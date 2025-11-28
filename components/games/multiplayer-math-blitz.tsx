@@ -1190,19 +1190,7 @@ export default function MultiplayerMathBlitz({
         setLocalAnswerSubmitted(false) // Reset even if problem not found
       }
     }, 200)
-      
-      // Check if both done
-      const p1Done = finishedState.player1Answers.length >= gameState.problems.length
-      const p2Done = finishedState.player2Answers.length >= gameState.problems.length
-      
-      if (p1Done && p2Done && !gameResult) {
-          const result = calculateMultiplayerResult(finishedState)
-          setGameResult(result)
-        saveGameStateToDatabase(finishedState, result)
-        onGameComplete?.(result.winner)
-      }
-    }
-  }, [gameState, currentProblem, isPlayer1, onGameComplete, gameResult])
+  }, [gameState, currentProblem, isPlayer1, onGameComplete, gameResult, myCurrentProblemIndex, localAnswerSubmitted, playerId, timeRemaining, saveGameStateToDatabase])
 
   const handleStartGame = () => {
     setShowInstructions(false)
