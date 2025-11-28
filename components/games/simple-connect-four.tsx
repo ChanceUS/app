@@ -789,6 +789,14 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           bet_amount: betAmount
         })
         alert(`Failed to create rematch: ${matchError.message}`)
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      if (!newMatch || !newMatch.id) {
+        console.error('❌ Match creation returned no data')
+        alert('Failed to create rematch: No match data returned')
+        setIsLoadingRematch(false)
         return
       }
       
@@ -801,8 +809,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         player2_id: newMatch.player2_id
       })
       
-      // Save rematch acceptance to match_history
-      const { error: historyError } = await supabase
+      // Save rematch acceptance to match_history (non-blocking)
+      supabase
         .from('match_history')
         .insert({
           match_id: matchId,
@@ -814,19 +822,19 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             accepted_at: new Date().toISOString()
           }
         })
-      
-      if (historyError) {
-        console.error('Error saving rematch acceptance:', historyError)
-      }
+        .then(({ error: historyError }) => {
+          if (historyError) {
+            console.error('Error saving rematch acceptance (non-critical):', historyError)
+          }
+        })
       
       setRematchStatus('accepted')
-      console.log('✅ Rematch accepted, new match created:', newMatch.id)
+      setIsLoadingRematch(false)
       
-      // Redirect to new match - use the most reliable method
+      // The insert already returned the match, so it exists in the database
+      // Use replace instead of push to avoid back button issues
       console.log('🔄 Redirecting to new match:', `/games/match/${newMatch.id}`)
-      
-      // Use window.location.href for immediate redirect
-      window.location.href = `/games/match/${newMatch.id}`
+      router.replace(`/games/match/${newMatch.id}`)
     } catch (error) {
       console.error('Error accepting rematch:', error)
     } finally {

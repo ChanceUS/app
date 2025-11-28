@@ -58,7 +58,7 @@ export default function MatchPage({ params }: MatchPageProps) {
         setUser(userData)
 
         // Get match data
-        const { data: matchData } = await supabase
+        const { data: matchData, error: matchError } = await supabase
           .from("matches")
           .select(`
             *,
@@ -69,7 +69,20 @@ export default function MatchPage({ params }: MatchPageProps) {
           .eq("id", matchId)
           .single()
 
+        if (matchError) {
+          console.error("Error loading match:", matchError)
+          // Check if it's a "not found" error vs other errors
+          if (matchError.code === 'PGRST116' || matchError.message?.includes('No rows')) {
+            console.error("Match not found:", matchId)
+            router.push("/games")
+            return
+          }
+          // For other errors, log but don't redirect - might be a temporary issue
+          console.error("Unexpected error loading match, but continuing:", matchError)
+        }
+
         if (!matchData) {
+          console.error("Match data is null:", matchId)
           router.push("/games")
           return
         }
