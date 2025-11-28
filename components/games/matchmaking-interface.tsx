@@ -26,6 +26,7 @@ interface MatchmakingInterfaceProps {
   currentUserId: string
   matchType: 'free' | 'tokens' | 'cash5' | 'cash10'
   betAmount: number
+  category?: string
   onMatchFound?: (matchId: string, matchType: string) => void
   onCancel?: () => void
   autoStart?: boolean
@@ -44,6 +45,7 @@ export default function MatchmakingInterface({
   currentUserId,
   matchType,
   betAmount,
+  category,
   onMatchFound,
   onCancel,
   autoStart = false
@@ -155,8 +157,8 @@ export default function MatchmakingInterface({
     setError(null)
 
     try {
-      console.log("🎯 Calling joinMatchmakingQueue...")
-      const result = await joinMatchmakingQueue(gameId, betAmount, matchType)
+      console.log("🎯 Calling joinMatchmakingQueue...", { category })
+      const result = await joinMatchmakingQueue(gameId, betAmount, matchType, category)
       console.log("🎯 joinMatchmakingQueue result:", result)
       
       if (result.error) {

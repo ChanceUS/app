@@ -45,6 +45,7 @@ export default function MultiplayerTriviaChallenge({
   const [matchReady, setMatchReady] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categorySelected, setCategorySelected] = useState(false)
+  const [hasExistingGameState, setHasExistingGameState] = useState(false)
   
   // Rematch state
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
@@ -177,6 +178,11 @@ export default function MultiplayerTriviaChallenge({
         
         console.log('🔄 Match data retrieved:', { hasGameData: !!matchData?.game_data?.gameState })
         
+        // Track if there's existing game state
+        if (matchData?.game_data?.gameState) {
+          setHasExistingGameState(true)
+        }
+        
         // Load category from match data (either selected by this player or opponent)
         const category = matchData?.game_data?.category
         if (category) {
@@ -246,18 +252,18 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
           }
-        } else if (!gameState && categorySelected) {
-          // Only initialize if we don't have any state yet AND category is selected
-          // Initialize new game - only if we're the first player to initialize
-          // Check if opponent has already initialized
-          const categorySelectedBy = matchData?.game_data?.category_selected_by
-          const isFirstPlayer = !categorySelectedBy || categorySelectedBy === currentUserId
+        } else if (!gameState) {
+          // Only initialize if we don't have any state yet
+          // If category is required but not selected, wait
+          // For existing matches without category, allow loading without category
+          const hasExistingGameData = matchData?.game_data && Object.keys(matchData.game_data).length > 0
           
-          if (!isFirstPlayer) {
-            // Wait for opponent to initialize
+          // If this is a new match and no category selected, wait for category selection
+          if (!hasExistingGameData && !categorySelected) {
             return
           }
           
+          // Initialize new game
           const questions: TriviaQuestion[] = []
           const usedQuestionIds = new Set<string>()
           
@@ -290,7 +296,7 @@ export default function MultiplayerTriviaChallenge({
             }
           }
           
-          console.log(`Loaded ${questions.length} questions for game with category: ${selectedCategory}`)
+          console.log(`Loaded ${questions.length} questions for game with category: ${selectedCategory || 'All Categories'}`)
           
           const initialState: MultiplayerTriviaState = {
             questions,
@@ -311,18 +317,20 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
             
-            // Save initial state with category
+            // Save initial state
             await saveGameStateToDatabase(initialState)
-            // Also save category to match data
-            await supabase
-              .from('matches')
-              .update({
-                game_data: {
-                  ...matchData?.game_data,
-                  category: selectedCategory
-                }
-              })
-              .eq('id', matchId)
+            // Also save category to match data if selected
+            if (selectedCategory) {
+              await supabase
+                .from('matches')
+                .update({
+                  game_data: {
+                    ...matchData?.game_data,
+                    category: selectedCategory
+                  }
+                })
+                .eq('id', matchId)
+            }
           }
         }
       } catch (error) {
@@ -330,14 +338,12 @@ export default function MultiplayerTriviaChallenge({
       }
     }
     
-    // Only load if category is selected or already exists in match
-    if (categorySelected || gameState) {
-      loadGameState()
-      
-      // Poll for updates every 500ms for better real-time sync
-      const interval = setInterval(loadGameState, 500)
-      return () => clearInterval(interval)
-    }
+    // Always try to load game state
+    loadGameState()
+    
+    // Poll for updates every 500ms for better real-time sync
+    const interval = setInterval(loadGameState, 500)
+    return () => clearInterval(interval)
   }, [matchId, isPlayer1, player1Id, player2Id, saveGameStateToDatabase, categorySelected, selectedCategory])
 
   // Update current question when index changes
@@ -950,76 +956,6 @@ export default function MultiplayerTriviaChallenge({
     )
   }
 
-  // Show category selection if not selected yet
-  if (!categorySelected && !gameState) {
-    const categories = [
-      { name: 'Pop Culture', value: 'Pop Culture' },
-      { name: 'Animals', value: 'Animals' },
-      { name: 'General Knowledge', value: 'General Knowledge' },
-      { name: 'Science', value: 'Science' },
-      { name: 'History', value: 'History' },
-      { name: 'Sports', value: 'Sports' }
-    ]
-    
-    const handleCategorySelect = async (category: string) => {
-      setSelectedCategory(category)
-      setCategorySelected(true)
-      
-      // Save category to match data
-      try {
-        const supabase = createClient()
-        const { data: matchData } = await supabase
-          .from('matches')
-          .select('game_data')
-          .eq('id', matchId)
-          .single()
-        
-        await supabase
-          .from('matches')
-          .update({
-            game_data: {
-              ...matchData?.game_data,
-              category: category,
-              category_selected_by: currentUserId
-            }
-          })
-          .eq('id', matchId)
-      } catch (error) {
-        console.error('Error saving category:', error)
-      }
-    }
-    
-    return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
-        <CardHeader>
-          <CardTitle className="text-center text-white flex items-center justify-center gap-2">
-            <Brain className="h-6 w-6 text-orange-500" />
-            Select Trivia Category
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-gray-400 text-center mb-6">
-            Choose a category for your trivia challenge. Both players will answer questions from this category.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {categories.map((cat) => (
-              <Button
-                key={cat.value}
-                onClick={() => handleCategorySelect(cat.value)}
-                className="h-20 bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 hover:border-orange-500 transition-colors"
-                variant="outline"
-              >
-                {cat.name}
-              </Button>
-            ))}
-          </div>
-          <p className="text-gray-500 text-sm text-center mt-4">
-            Waiting for category selection...
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
 
   // Show main game
   if (!matchReady) {

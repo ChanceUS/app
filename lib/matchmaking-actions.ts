@@ -9,7 +9,8 @@ import { redirect } from "next/navigation"
 export async function joinMatchmakingQueue(
   gameId: string, 
   betAmount: number, 
-  matchType: 'free' | 'tokens' | 'cash5' | 'cash10'
+  matchType: 'free' | 'tokens' | 'cash5' | 'cash10',
+  category?: string
 ) {
   const cookieStore = await cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })
@@ -139,7 +140,8 @@ export async function joinMatchmakingQueue(
     
     console.log(`🔍 All waiting queues with users:`, allQueuesWithUsers)
     
-    const { data: existingQueues, error: queueError } = await supabase
+    // Build query for matching queues - include category if provided
+    let queueQuery = supabase
       .from("matchmaking_queue")
       .select("*")
       .eq("game_id", gameId)
@@ -147,7 +149,13 @@ export async function joinMatchmakingQueue(
       .eq("status", "waiting")
       .neq("user_id", user.id) // Can't match with yourself
       .gt("expires_at", new Date().toISOString()) // Still valid
-      .limit(1)
+    
+    // Match by category if provided, or match queues without category
+    if (category) {
+      queueQuery = queueQuery.or(`category.eq.${category},category.is.null`)
+    }
+    
+    const { data: existingQueues, error: queueError } = await queueQuery.limit(1)
 
     const existingQueue = existingQueues?.[0] || null
     console.log(`🔍 Queue search result:`, { existingQueue, queueError })
@@ -156,6 +164,9 @@ export async function joinMatchmakingQueue(
       // Found a match! Create a match for both players
       console.log(`🎯 Found existing queue entry, creating match!`, existingQueue)
       
+      // Get category from existing queue or use current category
+      const queueCategory = existingQueue.category || category
+      
       const { data: matchData, error: matchError } = await supabase
         .from("matches")
         .insert({
@@ -163,7 +174,8 @@ export async function joinMatchmakingQueue(
           player1_id: existingQueue.user_id,
           player2_id: user.id,
           bet_amount: betAmount,
-          status: "waiting"
+          status: "waiting",
+          game_data: queueCategory ? { category: queueCategory } : {}
         })
         .select()
         .single()
@@ -272,7 +284,8 @@ export async function joinMatchmakingQueue(
         game_id: gameId,
         bet_amount: betAmount,
         match_type: matchType,
-        expires_at: expiresAt.toISOString()
+        expires_at: expiresAt.toISOString(),
+        category: category || null
       })
       .select(`
         *,

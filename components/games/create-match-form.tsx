@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, DollarSign, Coins, Zap, Users } from "lucide-react"
+import { Trophy, DollarSign, Coins, Zap, Users, Brain } from "lucide-react"
 import { useState, useEffect } from "react"
 import type { Game } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -19,6 +19,7 @@ interface CreateMatchFormProps {
 
 export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
   const [selectedTier, setSelectedTier] = useState<'free' | 'tokens' | 'cash5' | 'cash10'>('tokens')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [showMatchmaking, setShowMatchmaking] = useState(false)
   const [isCheckingMatchmaking, setIsCheckingMatchmaking] = useState(true)
   const [isCheckingActiveMatch, setIsCheckingActiveMatch] = useState(true)
@@ -347,8 +348,25 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
 
 
 
+  const isTriviaGame = game.name?.toLowerCase().includes('trivia') || game.name?.toLowerCase().includes('trivia challenge')
+  
+  const triviaCategories = [
+    { name: 'Pop Culture', value: 'Pop Culture' },
+    { name: 'Animals', value: 'Animals' },
+    { name: 'General Knowledge', value: 'General Knowledge' },
+    { name: 'Science', value: 'Science' },
+    { name: 'History', value: 'History' },
+    { name: 'Sports', value: 'Sports' }
+  ]
+
   const handleStartMatchmaking = () => {
-    console.log("🎮 User manually started matchmaking")
+    // Validate category selection for trivia games
+    if (isTriviaGame && !selectedCategory) {
+      alert('Please select a trivia category before starting matchmaking')
+      return
+    }
+    
+    console.log("🎮 User manually started matchmaking", { category: selectedCategory })
     setUserStartedMatchmaking(true)
     setShowMatchmaking(true)
   }
@@ -539,7 +557,7 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
 
 
   if (showMatchmaking && userStartedMatchmaking) {
-    console.log("🎮 Showing matchmaking interface - user started it manually")
+    console.log("🎮 Showing matchmaking interface - user started it manually", { category: selectedCategory })
     return (
       <MatchmakingInterface
         key={`matchmaking-${game.id}-${user.id}`}
@@ -551,6 +569,7 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
           selectedTier === 'tokens' ? 100 :
           selectedTier === 'cash5' ? 500 : 1000
         }
+        category={isTriviaGame ? selectedCategory : undefined}
         onMatchFound={handleMatchFound}
         onCancel={handleCancelMatchmaking}
         autoStart={true}
@@ -661,6 +680,35 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
               ))}
             </div>
           </div>
+
+          {/* Category Selection for Trivia Games */}
+          {isTriviaGame && (
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <Brain className="h-4 w-4 text-orange-500" />
+                Trivia Category <span className="text-red-400">*</span>
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {triviaCategories.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat.value)}
+                    className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                      selectedCategory === cat.value
+                        ? 'bg-orange-500/20 text-orange-400 border-orange-500 border-opacity-100'
+                        : 'bg-gray-800/30 border-gray-700 text-gray-400 hover:border-gray-600'
+                    } cursor-pointer`}
+                  >
+                    <span className="font-semibold">{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+              {!selectedCategory && (
+                <p className="text-sm text-red-400">Please select a category to continue</p>
+              )}
+            </div>
+          )}
 
 
 
