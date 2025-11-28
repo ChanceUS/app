@@ -53,17 +53,15 @@ export default async function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         <div className="mb-8 fade-in">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <Image src="/chanceus-eagle.png" alt="ChanceUS" width={60} height={60} className="h-12 w-12" />
-              <div>
-                <h1 className="text-3xl font-bold text-white">
-                  Welcome back, <span className="text-accent">{user.display_name || user.username}</span>!
-                </h1>
-                <p className="text-gray-400">Ready to challenge your friends in skill-based games?</p>
-              </div>
+          <div className="mb-4">
+            <div className="flex items-center space-x-4 mb-2">
+              <Image src="/chanceus-eagle.png" alt="ChanceUS" width={60} height={60} className="h-12 w-12 flex-shrink-0" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-white whitespace-nowrap">
+                Welcome back, <span className="text-accent">{user.display_name || user.username}</span>!
+              </h1>
             </div>
-            <div className="flex items-center space-x-4">
+            <p className="text-gray-400 mb-3">Ready to challenge your friends in skill-based games?</p>
+            <div className="flex items-center">
               <FriendsOnline />
             </div>
           </div>

@@ -22,10 +22,12 @@ import {
   CheckCircle, 
   XCircle,
   Play,
-  Pause
+  Pause,
+  UserPlus
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { sendFriendRequest, getFriends, getSentRequests, getPendingRequests, acceptFriendRequest } from '@/lib/friends-actions'
 
 interface EnhancedMatchInterfaceProps {
   match: Match
@@ -69,6 +71,11 @@ export default function EnhancedMatchInterface({
   const [isLoadingRematch, setIsLoadingRematch] = useState(false)
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
   const router = useRouter()
+  
+  // Friend request state
+  const [friendStatus, setFriendStatus] = useState<'none' | 'friends' | 'request_sent' | 'request_received' | 'checking'>('checking')
+  const [isLoadingFriend, setIsLoadingFriend] = useState(false)
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
   
   // Debug: Log when opponent state changes
   useEffect(() => {
@@ -201,8 +208,94 @@ export default function EnhancedMatchInterface({
   const isPlayer2 = match.player2_id === currentUser.id
   const isInMatch = isPlayer1 || isPlayer2
   
+  // Determine opponent ID
+  const opponentId = isPlayer1 ? localMatch.player2_id : isPlayer2 ? localMatch.player1_id : null
+  
   // Check if match is completed
   const isMatchCompleted = gameState.status === 'completed' || localMatch.status === 'completed'
+  
+  // Check friend status
+  useEffect(() => {
+    const checkFriendStatus = async () => {
+      if (!currentUser.id || !opponentId) {
+        setFriendStatus('none')
+        return
+      }
+      
+      setFriendStatus('checking')
+      try {
+        const [friendsResult, sentRequestsResult, pendingRequestsResult] = await Promise.all([
+          getFriends(),
+          getSentRequests(),
+          getPendingRequests()
+        ])
+        
+        // Check if already friends
+        if (friendsResult.data && friendsResult.data.some((f: any) => 
+          (f.user_id === currentUser.id && f.friend_id === opponentId) ||
+          (f.user_id === opponentId && f.friend_id === currentUser.id)
+        )) {
+          setFriendStatus('friends')
+          return
+        }
+        
+        // Check if request was sent
+        if (sentRequestsResult.data && sentRequestsResult.data.some((r: any) => r.friend_id === opponentId)) {
+          setFriendStatus('request_sent')
+          return
+        }
+        
+        // Check if request was received
+        if (pendingRequestsResult.data) {
+          const receivedRequest = pendingRequestsResult.data.find((r: any) => r.user_id === opponentId)
+          if (receivedRequest) {
+            setFriendStatus('request_received')
+            setPendingRequestId(receivedRequest.id)
+            return
+          }
+        }
+        
+        setFriendStatus('none')
+      } catch (error) {
+        console.error('Error checking friend status:', error)
+        setFriendStatus('none')
+      }
+    }
+    
+    if (currentUser.id && opponentId) {
+      checkFriendStatus()
+    }
+  }, [currentUser.id, opponentId])
+  
+  // Handle add friend
+  const handleAddFriend = async () => {
+    if (!currentUser.id || !opponentId || isLoadingFriend) return
+    
+    setIsLoadingFriend(true)
+    try {
+      if (friendStatus === 'request_received' && pendingRequestId) {
+        // Accept pending request
+        const result = await acceptFriendRequest(pendingRequestId)
+        if (result.success) {
+          setFriendStatus('friends')
+          setPendingRequestId(null)
+        }
+      } else if (friendStatus === 'none') {
+        // Send new request
+        const result = await sendFriendRequest(opponentId)
+        if (result.success) {
+          setFriendStatus('request_sent')
+        } else {
+          alert(result.error || 'Failed to send friend request')
+        }
+      }
+    } catch (error) {
+      console.error('Error handling friend request:', error)
+      alert('Failed to process friend request. Please try again.')
+    } finally {
+      setIsLoadingFriend(false)
+    }
+  }
 
   // Load rematch status and tournament check
   useEffect(() => {
@@ -1507,6 +1600,45 @@ export default function EnhancedMatchInterface({
             {isPlayer2 && <Badge className="ml-2 bg-orange-500/20 text-orange-400 text-xs">You</Badge>}
           </div>
         </div>
+        
+        {/* Friend Button - Directly below player names */}
+        {opponentId && localMatch.player2_id && (
+          <div className="mt-2 flex items-center justify-center">
+            <Button
+              onClick={handleAddFriend}
+              disabled={isLoadingFriend || friendStatus === 'friends'}
+              className={friendStatus === 'friends' ? 'bg-green-600 text-white cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}
+              size="sm"
+            >
+              {isLoadingFriend ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Processing...
+                </>
+              ) : friendStatus === 'friends' ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Friends
+                </>
+              ) : friendStatus === 'request_sent' ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2" />
+                  Request Sent
+                </>
+              ) : friendStatus === 'request_received' ? (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Accept Friend Request
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add {isPlayer1 ? (player2Data?.display_name || player2Data?.username || 'Opponent') : (player1Data?.display_name || player1Data?.username || 'Opponent')} as Friend
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         {/* Countdown Display - Show before game */}
         {gameState.status === 'countdown' && countdown !== null && localMatch.status !== 'waiting' && (

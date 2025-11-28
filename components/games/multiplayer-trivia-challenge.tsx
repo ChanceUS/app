@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, Timer, Brain, Users, CheckCircle } from "lucide-react"
+import { Trophy, Timer, Brain, Users, CheckCircle, UserPlus, Clock } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { sendFriendRequest, getFriends, getSentRequests, getPendingRequests, acceptFriendRequest } from "@/lib/friends-actions"
 import { 
   TriviaQuestion,
   TriviaAnswer,
@@ -52,6 +53,13 @@ export default function MultiplayerTriviaChallenge({
   const [betAmount, setBetAmount] = useState(0)
   const [gameId, setGameId] = useState<string | null>(null)
   const router = useRouter()
+  
+  // Friend request state
+  const [friendStatus, setFriendStatus] = useState<'none' | 'friends' | 'request_sent' | 'request_received' | 'checking'>('checking')
+  const [isLoadingFriend, setIsLoadingFriend] = useState(false)
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
+  const [opponentId, setOpponentId] = useState<string | null>(null)
+  const [opponentName, setOpponentName] = useState<string | null>(null)
   
   const isPlayer1 = currentUserId === player1Id
   
@@ -473,6 +481,103 @@ export default function MultiplayerTriviaChallenge({
     )
   }
 
+  // Determine opponent info
+  useEffect(() => {
+    if (player1Id && player2Id && currentUserId) {
+      const opponent = currentUserId === player1Id ? player2Id : player1Id
+      setOpponentId(opponent)
+      
+      // Fetch opponent name
+      const fetchOpponentName = async () => {
+        try {
+          const supabase = createClient()
+          const { data } = await supabase
+            .from('users')
+            .select('username, full_name')
+            .eq('id', opponent)
+            .single()
+          
+          if (data) {
+            setOpponentName(data.full_name || data.username || 'Opponent')
+          }
+        } catch (error) {
+          console.error('Error fetching opponent name:', error)
+        }
+      }
+      
+      fetchOpponentName()
+    }
+  }, [player1Id, player2Id, currentUserId])
+  
+  // Check friend status
+  useEffect(() => {
+    const checkFriendStatus = async () => {
+      if (!currentUserId || !opponentId) return
+      
+      setFriendStatus('checking')
+      try {
+        const [friends, sentRequests, pendingRequests] = await Promise.all([
+          getFriends(currentUserId),
+          getSentRequests(currentUserId),
+          getPendingRequests(currentUserId)
+        ])
+        
+        // Check if already friends
+        if (friends.some(f => f.id === opponentId)) {
+          setFriendStatus('friends')
+          return
+        }
+        
+        // Check if request was sent
+        if (sentRequests.some(r => r.receiver_id === opponentId)) {
+          setFriendStatus('request_sent')
+          return
+        }
+        
+        // Check if request was received
+        const receivedRequest = pendingRequests.find(r => r.sender_id === opponentId)
+        if (receivedRequest) {
+          setFriendStatus('request_received')
+          setPendingRequestId(receivedRequest.id)
+          return
+        }
+        
+        setFriendStatus('none')
+      } catch (error) {
+        console.error('Error checking friend status:', error)
+        setFriendStatus('none')
+      }
+    }
+    
+    if (currentUserId && opponentId) {
+      checkFriendStatus()
+    }
+  }, [currentUserId, opponentId])
+  
+  // Handle add friend
+  const handleAddFriend = async () => {
+    if (!currentUserId || !opponentId || isLoadingFriend) return
+    
+    setIsLoadingFriend(true)
+    try {
+      if (friendStatus === 'request_received' && pendingRequestId) {
+        // Accept pending request
+        await acceptFriendRequest(pendingRequestId)
+        setFriendStatus('friends')
+        setPendingRequestId(null)
+      } else if (friendStatus === 'none') {
+        // Send new request
+        await sendFriendRequest(currentUserId, opponentId)
+        setFriendStatus('request_sent')
+      }
+    } catch (error) {
+      console.error('Error handling friend request:', error)
+      alert('Failed to process friend request. Please try again.')
+    } finally {
+      setIsLoadingFriend(false)
+    }
+  }
+  
   // Rematch functions
   const requestRematch = async () => {
     if (!currentUserId || !player1Id || !player2Id || !gameId) return
@@ -656,6 +761,79 @@ export default function MultiplayerTriviaChallenge({
               </div>
             </div>
           </div>
+          
+          {/* Rematch Request Section - Only show for non-tournament matches */}
+          {!isTournamentMatch && (
+            <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+              
+              {rematchStatus === 'none' && (
+                <div className="text-center">
+                  <p className="text-gray-300 mb-4">Want to play again?</p>
+                  <button
+                    onClick={requestRematch}
+                    disabled={isLoadingRematch}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
+                  </button>
+                  <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'requested' && (
+                <div className="text-center">
+                  <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
+                  <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'accepted' && (
+                <div className="text-center">
+                  <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
+                  <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                </div>
+              )}
+              
+              {rematchStatus === 'received' && (
+                <div className="text-center">
+                  <p className="text-yellow-400 mb-4">🎮 Opponent wants a rematch!</p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={acceptRematch}
+                      disabled={isLoadingRematch}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      {isLoadingRematch ? 'Accepting...' : 'Accept'}
+                    </button>
+                    <button
+                      onClick={rejectRematch}
+                      disabled={isLoadingRematch}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    >
+                      {isLoadingRematch ? 'Rejecting...' : 'Decline'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {rematchStatus === 'rejected' && (
+                <div className="text-center">
+                  <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                  <button
+                    onClick={() => {
+                      setRematchStatus('none')
+                      setRematchRequestedBy(null)
+                    }}
+                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                  >
+                    Request Again
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          
         </CardContent>
       </Card>
     )
@@ -789,6 +967,7 @@ export default function MultiplayerTriviaChallenge({
         <div className="text-center text-sm text-gray-400">
           Answer correctly to earn points! Faster answers = more points.
         </div>
+        
       </CardContent>
     </Card>
   )

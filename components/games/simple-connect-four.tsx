@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { sendFriendRequest, getFriends, getSentRequests, getPendingRequests, acceptFriendRequest } from "@/lib/friends-actions"
+import { UserPlus, CheckCircle, Clock } from "lucide-react"
 
 interface SimpleConnectFourProps {
   matchId: string
@@ -36,6 +38,11 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [rematchRequestedBy, setRematchRequestedBy] = useState<string | null>(null)
   const [rematchStatus, setRematchStatus] = useState<'none' | 'requested' | 'received' | 'accepted' | 'rejected'>('none')
   const [isLoadingRematch, setIsLoadingRematch] = useState(false)
+  
+  // Friend request state
+  const [friendStatus, setFriendStatus] = useState<'none' | 'friends' | 'request_sent' | 'request_received' | 'checking'>('checking')
+  const [isLoadingFriend, setIsLoadingFriend] = useState(false)
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null)
 
   // Function to load move history from database
   const loadMoveHistoryFromDB = async () => {
@@ -111,6 +118,22 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   // Determine if it's the current user's turn
   const isMyTurn = currentPlayer === 'player1' ? currentUserId === player1Id : currentUserId === player2Id
   const myPlayer = currentUserId === player1Id ? 'player1' : currentUserId === player2Id ? 'player2' : null
+  
+  // Get opponent ID
+  const opponentId = currentUserId === player1Id ? player2Id : currentUserId === player2Id ? player1Id : null
+  const opponentName = currentUserId === player1Id ? playerNames.player2 : currentUserId === player2Id ? playerNames.player1 : null
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Friend feature debug:', {
+      currentUserId,
+      player1Id,
+      player2Id,
+      opponentId,
+      opponentName,
+      friendStatus
+    })
+  }, [currentUserId, player1Id, player2Id, opponentId, opponentName, friendStatus])
 
   // Move timer effect
   useEffect(() => {
@@ -142,6 +165,98 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
       isProcessingMoveRef.current = false
     }
   }, [isMyTurn])
+
+  // Check friend status with opponent
+  useEffect(() => {
+    const checkFriendStatus = async () => {
+      if (!currentUserId || !opponentId) {
+        console.log('🔍 Friend check: Missing currentUserId or opponentId', { currentUserId, opponentId })
+        setFriendStatus('none')
+        return
+      }
+
+      console.log('🔍 Checking friend status with opponent:', { currentUserId, opponentId })
+
+      try {
+        // Check if already friends
+        const { data: friends, error: friendsError } = await getFriends()
+        if (!friendsError && friends) {
+          const isFriend = friends.some(f => 
+            (f.user_id === currentUserId && f.friend_id === opponentId) ||
+            (f.user_id === opponentId && f.friend_id === currentUserId)
+          )
+          if (isFriend) {
+            console.log('✅ Already friends')
+            setFriendStatus('friends')
+            return
+          }
+        }
+
+        // Check if request was sent
+        const { data: sentRequests, error: sentError } = await getSentRequests()
+        if (!sentError && sentRequests) {
+          const requestSent = sentRequests.some(r => r.friend_id === opponentId)
+          if (requestSent) {
+            console.log('📤 Friend request already sent')
+            setFriendStatus('request_sent')
+            return
+          }
+        }
+
+        // Check if request was received
+        const { data: pendingRequests, error: pendingError } = await getPendingRequests()
+        if (!pendingError && pendingRequests) {
+          const requestReceived = pendingRequests.find(r => r.user_id === opponentId)
+          if (requestReceived) {
+            console.log('📥 Friend request received')
+            setFriendStatus('request_received')
+            setPendingRequestId(requestReceived.id)
+            return
+          }
+        }
+
+        console.log('🔍 No friend relationship found')
+        setFriendStatus('none')
+      } catch (error) {
+        console.error('Error checking friend status:', error)
+        setFriendStatus('none')
+      }
+    }
+
+    checkFriendStatus()
+  }, [currentUserId, opponentId, player1Id, player2Id])
+
+  // Handle sending friend request
+  const handleAddFriend = async () => {
+    if (!opponentId || !currentUserId) return
+
+    setIsLoadingFriend(true)
+    try {
+      // If there's a pending request from opponent, accept it instead
+      if (friendStatus === 'request_received' && pendingRequestId) {
+        const result = await acceptFriendRequest(pendingRequestId)
+        if (result.success) {
+          setFriendStatus('friends')
+          setPendingRequestId(null)
+        } else {
+          alert(result.error || 'Failed to accept friend request')
+        }
+      } else {
+        // Send new friend request
+        const result = await sendFriendRequest(opponentId)
+        if (result.success) {
+          setFriendStatus('request_sent')
+        } else {
+          alert(result.error || 'Failed to send friend request')
+        }
+      }
+    } catch (error) {
+      console.error('Error with friend request:', error)
+      alert('Failed to process friend request')
+    } finally {
+      setIsLoadingFriend(false)
+    }
+  }
 
   // Keep boardRef in sync with board state
   useEffect(() => {
@@ -1007,6 +1122,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       </p>
                       <p>This match has finished.</p>
                       
+                      
                       {/* Rematch Request Section - Only show for non-tournament matches */}
                       {!isTournamentMatch && (
                       <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
@@ -1149,6 +1265,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                             </span>
                           </p>
                         )}
+                        
                         
                         {/* Move Timer - Compact version */}
                         {isMoveTimerActive && currentStatus === 'in_progress' && !winner && (

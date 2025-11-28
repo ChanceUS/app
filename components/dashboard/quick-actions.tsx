@@ -69,13 +69,13 @@ export default function QuickActions() {
           <Card key={game.id} className="bg-gray-900/50 border-gray-800 card-hover group">
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
-                <div className="relative w-20 h-20 rounded-lg overflow-hidden group-hover:scale-110 transition-transform duration-300">
+                <div className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-lg overflow-hidden group-hover:scale-110 transition-transform duration-300">
                   <Image
                     src={game.thumbnail}
                     alt={game.name}
                     fill
                     className="object-cover"
-                    sizes="80px"
+                    sizes="(max-width: 640px) 128px, 160px"
                   />
                 </div>
               </div>
