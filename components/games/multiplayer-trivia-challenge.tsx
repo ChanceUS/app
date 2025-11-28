@@ -39,7 +39,6 @@ export default function MultiplayerTriviaChallenge({
   const [currentQuestion, setCurrentQuestion] = useState<TriviaQuestion | null>(null)
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
   const [gameResult, setGameResult] = useState<TriviaResult | null>(null)
-  const [opponentProgress, setOpponentProgress] = useState(0)
   const [localAnswerSubmitted, setLocalAnswerSubmitted] = useState(false)
   const [myCurrentQuestionIndex, setMyCurrentQuestionIndex] = useState(0)
   const [bothPlayersReady, setBothPlayersReady] = useState(false)
@@ -185,19 +184,23 @@ export default function MultiplayerTriviaChallenge({
             p2Score: loadedState.player2Score
           })
           
-          // Only update state if we don't have a state yet, or if the loaded state has more progress
-          const shouldUpdate = !gameState || 
-            loadedState.player1Answers.length > gameState.player1Answers.length || 
-            loadedState.player2Answers.length > gameState.player2Answers.length
+          // Always update state if there are any changes (not just progress)
+          const hasChanges = !gameState || 
+            loadedState.player1Answers.length !== gameState.player1Answers.length || 
+            loadedState.player2Answers.length !== gameState.player2Answers.length ||
+            loadedState.player1Score !== gameState.player1Score ||
+            loadedState.player2Score !== gameState.player2Score ||
+            loadedState.player1Finished !== gameState.player1Finished ||
+            loadedState.player2Finished !== gameState.player2Finished
             
           console.log('🔄 Should update state?', {
             hasGameState: !!gameState,
             p1Progress: loadedState.player1Answers.length,
             p2Progress: loadedState.player2Answers.length,
-            shouldUpdate
+            hasChanges
           })
           
-          if (shouldUpdate) {
+          if (hasChanges) {
             setGameState(loadedState)
             
             // Set player's current question index
@@ -205,7 +208,7 @@ export default function MultiplayerTriviaChallenge({
             console.log('✅ Updating player question index to:', myAnswers.length)
             setMyCurrentQuestionIndex(myAnswers.length)
           } else {
-            console.log('⏭️ Skipping state update - no progress change')
+            console.log('⏭️ Skipping state update - no changes detected')
           }
           
           // Check if both finished to show results
@@ -214,9 +217,6 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             return
           }
-          
-          // Update opponent progress
-          setOpponentProgress(isPlayer1 ? loadedState.player2Answers.length : loadedState.player1Answers.length)
           
           // Check if match is ready
           if (player1Id && player2Id) {
@@ -280,10 +280,10 @@ export default function MultiplayerTriviaChallenge({
     
     loadGameState()
     
-    // Poll for updates every 1 second
-    const interval = setInterval(loadGameState, 1000)
+    // Poll for updates every 500ms for better real-time sync
+    const interval = setInterval(loadGameState, 500)
     return () => clearInterval(interval)
-  }, [matchId, isPlayer1, player1Id, player2Id, saveGameStateToDatabase])
+  }, [matchId, isPlayer1, player1Id, player2Id, saveGameStateToDatabase, gameState])
 
   // Update current question when index changes
   useEffect(() => {
@@ -849,6 +849,7 @@ export default function MultiplayerTriviaChallenge({
   const opponentAnswerCount = isPlayer1 ? gameState.player2Answers.length : gameState.player1Answers.length
   const myFinished = myAnswerCount >= TOTAL_QUESTIONS
   const opponentFinished = opponentAnswerCount >= TOTAL_QUESTIONS
+  const opponentProgress = opponentAnswerCount // Derive directly from gameState
   
   // If player has finished, don't show questions anymore - show waiting screen or results
   if (myFinished && !opponentFinished) {
@@ -902,6 +903,9 @@ export default function MultiplayerTriviaChallenge({
 
   if (!currentQuestion) return null
 
+  // Derive opponent progress from gameState for main game view
+  const mainOpponentProgress = isPlayer1 ? gameState.player2Answers.length : gameState.player1Answers.length
+
   return (
     <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
       <CardHeader>
@@ -918,7 +922,7 @@ export default function MultiplayerTriviaChallenge({
           </div>
           <div className="text-right">
             <p className="text-gray-400">Opponent Progress</p>
-            <p className="text-2xl font-bold text-orange-500">{opponentProgress}/{TOTAL_QUESTIONS}</p>
+            <p className="text-2xl font-bold text-orange-500">{mainOpponentProgress}/{TOTAL_QUESTIONS}</p>
             <p className="text-sm text-gray-400 mt-1">
               Score: {isPlayer1 ? gameState.player2Score : gameState.player1Score} pts
             </p>
