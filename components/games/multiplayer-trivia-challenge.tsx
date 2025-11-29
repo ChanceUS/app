@@ -48,6 +48,7 @@ export default function MultiplayerTriviaChallenge({
   const [hasExistingGameState, setHasExistingGameState] = useState(false)
   const answerSubmittedRef = useRef(false)
   const timerActiveRef = useRef(false)
+  const lastAnswerCountRef = useRef(0)
   
   // Rematch state
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
@@ -203,29 +204,57 @@ export default function MultiplayerTriviaChallenge({
             p2Score: loadedState.player2Score
           })
           
-          // Use a ref to track previous state to avoid unnecessary updates
+          // Update state - always use the database state as source of truth
+          // But preserve local state if it has more recent answers (to prevent race conditions)
           setGameState(prevState => {
             if (!prevState) {
+              // First load - use database state
+              const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+              setMyCurrentQuestionIndex(myAnswers.length)
               return loadedState
             }
             
-            // Only update if there are actual changes
-            const hasChanges = 
-              loadedState.player1Answers.length !== prevState.player1Answers.length || 
-              loadedState.player2Answers.length !== prevState.player2Answers.length ||
+            // Check if database state has more progress than local state
+            const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+            const localMyAnswers = isPlayer1 ? prevState.player1Answers : prevState.player2Answers
+            
+            // Use database state if it has more answers (more up-to-date)
+            if (dbMyAnswers.length > localMyAnswers.length) {
+              console.log('✅ Database has more progress, updating state. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
+              setMyCurrentQuestionIndex(dbMyAnswers.length)
+              return loadedState
+            }
+            
+            // If local state has more answers, keep it (it's more recent)
+            if (localMyAnswers.length > dbMyAnswers.length) {
+              console.log('⚠️ Local state has more progress, keeping local. Local:', localMyAnswers.length, 'DB:', dbMyAnswers.length)
+              return prevState
+            }
+            
+            // Same progress - check other fields
+            const hasOtherChanges = 
               loadedState.player1Score !== prevState.player1Score ||
               loadedState.player2Score !== prevState.player2Score ||
               loadedState.player1Finished !== prevState.player1Finished ||
               loadedState.player2Finished !== prevState.player2Finished
             
-            if (hasChanges) {
-              // Set player's current question index
-              const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-              console.log('✅ Updating player question index to:', myAnswers.length)
+            if (hasOtherChanges) {
+              // Merge: keep local answers if same length, but update other fields
+              const mergedState = {
+                ...loadedState,
+                player1Answers: prevState.player1Answers.length >= loadedState.player1Answers.length 
+                  ? prevState.player1Answers 
+                  : loadedState.player1Answers,
+                player2Answers: prevState.player2Answers.length >= loadedState.player2Answers.length 
+                  ? prevState.player2Answers 
+                  : loadedState.player2Answers
+              }
+              const myAnswers = isPlayer1 ? mergedState.player1Answers : mergedState.player2Answers
               setMyCurrentQuestionIndex(myAnswers.length)
-              return loadedState
+              return mergedState
             }
             
+            // No changes - keep previous state
             return prevState
           })
           
@@ -379,6 +408,15 @@ export default function MultiplayerTriviaChallenge({
     const currentPlayerAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
     const nextQuestionIndex = currentPlayerAnswers.length
     
+    // Prevent going backwards - only allow progress forward
+    if (nextQuestionIndex < lastAnswerCountRef.current) {
+      console.warn('⚠️ Attempted to go backwards in questions, preventing reset. Current:', nextQuestionIndex, 'Last:', lastAnswerCountRef.current)
+      return
+    }
+    
+    // Update last answer count
+    lastAnswerCountRef.current = nextQuestionIndex
+    
     // Don't update question if player has finished - clear current question
     if (nextQuestionIndex >= TOTAL_QUESTIONS) {
       if (currentQuestion) {
@@ -392,6 +430,7 @@ export default function MultiplayerTriviaChallenge({
       const question = gameState.questions[nextQuestionIndex]
       // Only update if the question actually changed to prevent flickering
       if (!currentQuestion || currentQuestion.question !== question.question || myCurrentQuestionIndex !== nextQuestionIndex) {
+        console.log('📝 Setting question to index:', nextQuestionIndex, 'Question:', question.question.substring(0, 50))
         setCurrentQuestion(question)
         setTimeRemaining(question.timeLimit || QUESTION_TIME_LIMIT)
         setLocalAnswerSubmitted(false)
@@ -402,45 +441,7 @@ export default function MultiplayerTriviaChallenge({
     }
   }, [isPlayer1 ? gameState?.player1Answers?.length : gameState?.player2Answers?.length, gameState?.questions, isPlayer1, myCurrentQuestionIndex])
 
-  // Timer countdown
-  useEffect(() => {
-    if (!matchReady || !currentQuestion || gameResult) {
-      timerActiveRef.current = false
-      return
-    }
-    
-    // Reset timer and flags when question changes
-    setTimeRemaining(currentQuestion.timeLimit || QUESTION_TIME_LIMIT)
-    answerSubmittedRef.current = false
-    timerActiveRef.current = true
-    
-    const timer = setInterval(() => {
-      // Check if answer was already submitted
-      if (answerSubmittedRef.current || !timerActiveRef.current) {
-        return
-      }
-      
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          // Timeout - submit no answer only if not already submitted
-          if (!answerSubmittedRef.current && timerActiveRef.current) {
-            answerSubmittedRef.current = true
-            timerActiveRef.current = false
-            handleAnswer(-1) // Timeout
-          }
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-    
-    return () => {
-      clearInterval(timer)
-      timerActiveRef.current = false
-    }
-  }, [matchReady, currentQuestion, gameResult, handleAnswer])
-
-  // Handle answer submission
+  // Handle answer submission - defined before timer so it can be used
   const handleAnswer = useCallback(async (selectedAnswerIndex: number) => {
     // Use refs to check submission status synchronously
     if (answerSubmittedRef.current) {
@@ -510,6 +511,44 @@ export default function MultiplayerTriviaChallenge({
     
     // Question will update automatically via useEffect when state changes
   }, [currentQuestion, gameState, isPlayer1, timeRemaining, saveGameStateToDatabase, onGameComplete])
+
+  // Timer countdown - must be after handleAnswer is defined
+  useEffect(() => {
+    if (!matchReady || !currentQuestion || gameResult) {
+      timerActiveRef.current = false
+      return
+    }
+    
+    // Reset timer and flags when question changes
+    setTimeRemaining(currentQuestion.timeLimit || QUESTION_TIME_LIMIT)
+    answerSubmittedRef.current = false
+    timerActiveRef.current = true
+    
+    const timer = setInterval(() => {
+      // Check if answer was already submitted
+      if (answerSubmittedRef.current || !timerActiveRef.current) {
+        return
+      }
+      
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          // Timeout - submit no answer only if not already submitted
+          if (!answerSubmittedRef.current && timerActiveRef.current) {
+            answerSubmittedRef.current = true
+            timerActiveRef.current = false
+            handleAnswer(-1) // Timeout
+          }
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
+    return () => {
+      clearInterval(timer)
+      timerActiveRef.current = false
+    }
+  }, [matchReady, currentQuestion, gameResult, handleAnswer])
 
   // Calculate trivia result
   const calculateTriviaResult = (state: MultiplayerTriviaState): TriviaResult => {

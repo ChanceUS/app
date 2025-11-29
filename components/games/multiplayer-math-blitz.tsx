@@ -1239,26 +1239,33 @@ export default function MultiplayerMathBlitz({
       
       setFriendStatus('checking')
       try {
-        const [friends, sentRequests, pendingRequests] = await Promise.all([
-          getFriends(currentUserId),
-          getSentRequests(currentUserId),
-          getPendingRequests(currentUserId)
+        const [friendsResult, sentRequestsResult, pendingRequestsResult] = await Promise.all([
+          getFriends(),
+          getSentRequests(),
+          getPendingRequests()
         ])
         
+        const friends = friendsResult.data || []
+        const sentRequests = sentRequestsResult.data || []
+        const pendingRequests = pendingRequestsResult.data || []
+        
         // Check if already friends
-        if (friends.some(f => f.id === opponentId)) {
+        if (friends.some((f: any) => 
+          (f.user_id === currentUserId && f.friend_id === opponentId) ||
+          (f.user_id === opponentId && f.friend_id === currentUserId)
+        )) {
           setFriendStatus('friends')
           return
         }
         
         // Check if request was sent
-        if (sentRequests.some(r => r.receiver_id === opponentId)) {
+        if (sentRequests.some((r: any) => r.friend_id === opponentId)) {
           setFriendStatus('request_sent')
           return
         }
         
         // Check if request was received
-        const receivedRequest = pendingRequests.find(r => r.sender_id === opponentId)
+        const receivedRequest = pendingRequests.find((r: any) => r.user_id === opponentId)
         if (receivedRequest) {
           setFriendStatus('request_received')
           setPendingRequestId(receivedRequest.id)
