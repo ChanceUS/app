@@ -792,7 +792,58 @@ export function getRandomTriviaQuestion(category?: string): TriviaQuestion {
   return triviaQuestions[Math.floor(Math.random() * triviaQuestions.length)]
 }
 
-// Generate synchronized question set for multiplayer trivia (similar to Math Blitz)
+// Generate synchronized question set for multiplayer trivia (SYNCHRONOUS - like Math Blitz)
+// Uses matchId as seed to ensure both players get same questions
+export function generateSynchronizedTriviaQuestionsSync(
+  matchId: string, 
+  category: string | null, 
+  count: number = 8
+): TriviaQuestion[] {
+  const questions: TriviaQuestion[] = []
+  
+  // Use matchId as seed for consistency (both players get same questions)
+  // Simple seeded random number generator (same approach as Math Blitz)
+  let seedNum = 0
+  for (let i = 0; i < matchId.length; i++) {
+    seedNum += matchId.charCodeAt(i)
+  }
+  
+  // Filter questions by category if specified
+  let availableQuestions = triviaQuestions
+  if (category) {
+    availableQuestions = triviaQuestions.filter(q => q.category === category)
+    // If no questions match category, use all questions
+    if (availableQuestions.length === 0) {
+      console.warn(`⚠️ No questions found for category ${category}, using all questions`)
+      availableQuestions = triviaQuestions
+    }
+  }
+  
+  // Generate questions using seeded selection (deterministic based on matchId)
+  for (let i = 0; i < count; i++) {
+    // Use seed + index to generate consistent question selection
+    // This ensures both players get the same questions in the same order
+    const questionSeed = seedNum + i * 17 // Multiply by prime for better distribution
+    const index = questionSeed % availableQuestions.length
+    
+    const q = availableQuestions[index]
+    
+    // Check for duplicates (shouldn't happen with good seed, but just in case)
+    if (questions.some(existing => existing.question === q.question)) {
+      // If duplicate, use next question
+      const nextIndex = (index + 1) % availableQuestions.length
+      questions.push({ ...availableQuestions[nextIndex], timeLimit: 45 })
+    } else {
+      questions.push({ ...q, timeLimit: 45 })
+    }
+  }
+  
+  console.log(`✅ Generated ${questions.length} questions synchronously (requested: ${count}, category: ${category || 'all'})`)
+  return questions
+}
+
+// Generate synchronized question set for multiplayer trivia (ASYNC - with database fallback)
+// DEPRECATED: Use generateSynchronizedTriviaQuestionsSync instead for consistency
 export async function generateSynchronizedTriviaQuestions(
   matchId: string, 
   category: string | null, 

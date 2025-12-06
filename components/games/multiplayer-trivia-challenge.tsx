@@ -184,6 +184,26 @@ export default function MultiplayerTriviaChallenge({
     return () => clearInterval(interval)
   }, [matchId, currentUserId])
 
+  // Reset all state when matchId changes (new game/rematch)
+  useEffect(() => {
+    console.log('🔄 Match ID changed, resetting all state for new game:', matchId)
+    setGameState(null)
+    setCurrentQuestion(null)
+    setTimeRemaining(0)
+    setGameResult(null)
+    setLocalAnswerSubmitted(false)
+    setMyCurrentQuestionIndex(0)
+    setBothPlayersReady(false)
+    setMatchReady(false)
+    setSelectedCategory(null)
+    setCategorySelected(false)
+    setHasExistingGameState(false)
+    isInitializingRef.current = false
+    answerSubmittedRef.current = false
+    timerActiveRef.current = false
+    lastAnswerCountRef.current = 0
+  }, [matchId])
+
   // Load game state from database
   useEffect(() => {
     const loadGameState = async () => {
@@ -214,24 +234,31 @@ export default function MultiplayerTriviaChallenge({
           setCategorySelected(true)
         }
         
-        // CRITICAL: If we already have local gameState with questions, don't re-initialize
+        // CRITICAL: If we already have local gameState with questions for THIS match, don't re-initialize
         // This prevents race conditions where polling happens before save completes
+        // BUT: Only if the questions are actually valid (not from a previous match)
         if (gameState && gameState.questions && gameState.questions.length > 0) {
-          // We have local state with questions - only update if database has more progress
+          // Verify the gameState is for this match by checking if it has the right structure
+          // If database has gameState, check if it's different (might be from previous match)
           if (matchData?.game_data?.gameState) {
             const loadedState = matchData.game_data.gameState as MultiplayerTriviaState
-            const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-            const localMyAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
             
-            // Only update if database has more answers (more progress)
-            if (dbMyAnswers.length > localMyAnswers.length) {
-              console.log('🔄 Database has more progress, updating from DB. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
-              // Merge: keep local questions but update answers/scores
-              setGameState({
-                ...loadedState,
-                questions: gameState.questions // Keep local questions!
-              })
-              setMyCurrentQuestionIndex(dbMyAnswers.length)
+            // If database state has questions, use it (it's the source of truth)
+            if (loadedState.questions && loadedState.questions.length > 0) {
+              const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+              const localMyAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
+              
+              // Only update if database has more answers (more progress) OR if database has questions but local doesn't match
+              if (dbMyAnswers.length > localMyAnswers.length || 
+                  JSON.stringify(loadedState.questions) !== JSON.stringify(gameState.questions)) {
+                console.log('🔄 Database has different state, updating from DB. DB answers:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
+                // Use database state (it's the source of truth)
+                setGameState(loadedState)
+                setMyCurrentQuestionIndex(dbMyAnswers.length)
+              }
+            } else {
+              // Database doesn't have questions but we do - keep local (might be from previous match, but better than nothing)
+              console.log('⚠️ Database state missing questions, keeping local questions')
             }
           }
           return // Don't re-initialize if we already have questions!
@@ -356,11 +383,24 @@ export default function MultiplayerTriviaChallenge({
           isInitializingRef.current = true
           
           // Initialize new game using helper function (similar to Math Blitz pattern)
+          // Use synchronous generation like Math Blitz - no async database calls
           console.log(`🎯 Initializing trivia game for category: ${categoryFromMatch || 'All Categories'}`)
           
           try {
-            const { initializeMultiplayerTriviaGame } = await import('@/lib/game-logic')
-            const initialState = await initializeMultiplayerTriviaGame(matchId, categoryFromMatch, TOTAL_QUESTIONS)
+            const { generateSynchronizedTriviaQuestionsSync } = await import('@/lib/game-logic')
+            const questions = generateSynchronizedTriviaQuestionsSync(matchId, categoryFromMatch, TOTAL_QUESTIONS)
+            
+            const initialState: MultiplayerTriviaState = {
+              questions,
+              currentQuestionIndex: 0,
+              player1Score: 0,
+              player2Score: 0,
+              player1Answers: [],
+              player2Answers: [],
+              player1Finished: false,
+              player2Finished: false,
+              gameStartTime: Date.now()
+            }
             
             console.log(`✅ Initialized trivia game with ${initialState.questions.length} questions`)
             console.log(`📋 Questions:`, initialState.questions.map((q, i) => `${i + 1}. ${q.question.substring(0, 50)}... (${q.category})`))
