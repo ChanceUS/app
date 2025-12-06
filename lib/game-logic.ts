@@ -704,27 +704,13 @@ export async function getRandomTriviaQuestionFromDB(difficulty?: 'easy' | 'mediu
     if (error) {
       console.error('Error fetching trivia question:', error)
       // Fallback to local questions - try to match category if possible
-      if (category) {
-        const filteredQuestions = triviaQuestions.filter(q => q.category === category)
-        if (filteredQuestions.length > 0) {
-          return filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)]
-        }
-      }
-      // If no category match or no category specified, return any question
-      return getRandomTriviaQuestion()
+      return getRandomTriviaQuestion(category || undefined)
     }
 
     if (!data || data.length === 0) {
       console.warn('No trivia questions found in database, falling back to legacy questions')
-      // Try to match category if possible
-      if (category) {
-        const filteredQuestions = triviaQuestions.filter(q => q.category === category)
-        if (filteredQuestions.length > 0) {
-          return filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)]
-        }
-      }
-      // If no category match or no category specified, return any question
-      return getRandomTriviaQuestion()
+      // Fallback to local questions - try to match category if possible
+      return getRandomTriviaQuestion(category || undefined)
     }
 
     const question = data[0]
@@ -736,7 +722,7 @@ export async function getRandomTriviaQuestionFromDB(difficulty?: 'easy' | 'mediu
     }
   } catch (error) {
     console.error('Error in getRandomTriviaQuestionFromDB:', error)
-    return getRandomTriviaQuestion()
+    return getRandomTriviaQuestion(category || undefined)
   }
 }
 
@@ -790,8 +776,99 @@ export async function getRandomMultiplicationQuestionFromDB(difficulty?: 'easy' 
 }
 
 // Legacy function for backward compatibility
-export function getRandomTriviaQuestion(): TriviaQuestion {
+export function getRandomTriviaQuestion(category?: string): TriviaQuestion {
+  if (category) {
+    const filtered = triviaQuestions.filter(q => q.category === category)
+    if (filtered.length > 0) {
+      return filtered[Math.floor(Math.random() * filtered.length)]
+    }
+  }
   return triviaQuestions[Math.floor(Math.random() * triviaQuestions.length)]
+}
+
+// Generate synchronized question set for multiplayer trivia (similar to Math Blitz)
+export async function generateSynchronizedTriviaQuestions(
+  matchId: string, 
+  category: string | null, 
+  count: number = 8
+): Promise<TriviaQuestion[]> {
+  const questions: TriviaQuestion[] = []
+  const usedQuestionIds = new Set<string>()
+  
+  // Use matchId as seed for consistency (both players get same questions)
+  // Simple seeded approach: use matchId hash to determine question order
+  let seedNum = 0
+  for (let i = 0; i < matchId.length; i++) {
+    seedNum += matchId.charCodeAt(i)
+  }
+  
+  // Try to get questions from database first, then fall back to local
+  for (let i = 0; i < count; i++) {
+    let q: TriviaQuestion | null = null
+    
+    // Try database first (max 2 attempts per question to avoid delays)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        q = await getRandomTriviaQuestionFromDB(undefined, category || undefined)
+        
+        // Check if valid and not duplicate
+        if (q && !usedQuestionIds.has(q.question) && !questions.some(existing => existing.question === q!.question)) {
+          // Accept if category matches OR if no category specified
+          if (!category || q.category === category) {
+            break // Found a good question
+          }
+        }
+        q = null
+      } catch (error) {
+        // Database failed, will use local fallback
+        q = null
+      }
+    }
+    
+    // If database failed, use local questions
+    if (!q) {
+      // Try to get a local question matching the category
+      if (category) {
+        const filtered = triviaQuestions.filter(
+          localQ => localQ.category === category && 
+          !usedQuestionIds.has(localQ.question) &&
+          !questions.some(existing => existing.question === localQ.question)
+        )
+        if (filtered.length > 0) {
+          q = filtered[Math.floor(Math.random() * filtered.length)]
+        }
+      }
+      
+      // If no category match or no category specified, use any unused local question
+      if (!q) {
+        const unused = triviaQuestions.filter(
+          localQ => !usedQuestionIds.has(localQ.question) &&
+          !questions.some(existing => existing.question === localQ.question)
+        )
+        if (unused.length > 0) {
+          q = unused[Math.floor(Math.random() * unused.length)]
+        }
+      }
+      
+      // Last resort: use any question (even if duplicate)
+      if (!q) {
+        q = getRandomTriviaQuestion(category || undefined)
+      }
+    }
+    
+    // Always add the question - never skip
+    if (q) {
+      usedQuestionIds.add(q.question)
+      questions.push({ ...q, timeLimit: 45 }) // Default time limit
+    } else {
+      // Emergency fallback (should never happen)
+      const emergencyQ = getRandomTriviaQuestion(category || undefined)
+      usedQuestionIds.add(emergencyQ.question)
+      questions.push({ ...emergencyQ, timeLimit: 45 })
+    }
+  }
+  
+  return questions
 }
 
 // Multiplayer game functions
@@ -801,6 +878,27 @@ export function initializeMultiplayerGame(matchId: string): MultiplayerGameState
   return {
     problems,
     currentProblemIndex: 0,
+    player1Score: 0,
+    player2Score: 0,
+    player1Answers: [],
+    player2Answers: [],
+    player1Finished: false,
+    player2Finished: false,
+    gameStartTime: Date.now(),
+  }
+}
+
+// Initialize multiplayer trivia game (similar to Math Blitz pattern)
+export async function initializeMultiplayerTriviaGame(
+  matchId: string, 
+  category: string | null, 
+  totalQuestions: number = 8
+): Promise<MultiplayerTriviaState> {
+  const questions = await generateSynchronizedTriviaQuestions(matchId, category, totalQuestions)
+  
+  return {
+    questions,
+    currentQuestionIndex: 0,
     player1Score: 0,
     player2Score: 0,
     player1Answers: [],

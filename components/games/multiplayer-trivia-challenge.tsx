@@ -202,62 +202,69 @@ export default function MultiplayerTriviaChallenge({
             p1Answers: loadedState.player1Answers.length,
             p2Answers: loadedState.player2Answers.length,
             p1Score: loadedState.player1Score,
-            p2Score: loadedState.player2Score
+            p2Score: loadedState.player2Score,
+            hasQuestions: !!loadedState.questions && loadedState.questions.length > 0
           })
           
-          // Update state - always use the database state as source of truth
-          // But preserve local state if it has more recent answers (to prevent race conditions)
-          setGameState(prevState => {
-            if (!prevState) {
-              // First load - use database state
-              const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-              setMyCurrentQuestionIndex(myAnswers.length)
-              return loadedState
-            }
-            
-            // Check if database state has more progress than local state
-            const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-            const localMyAnswers = isPlayer1 ? prevState.player1Answers : prevState.player2Answers
-            
-            // Use database state if it has more answers (more up-to-date)
-            if (dbMyAnswers.length > localMyAnswers.length) {
-              console.log('✅ Database has more progress, updating state. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
-              setMyCurrentQuestionIndex(dbMyAnswers.length)
-              return loadedState
-            }
-            
-            // If local state has more answers, keep it (it's more recent)
-            if (localMyAnswers.length > dbMyAnswers.length) {
-              console.log('⚠️ Local state has more progress, keeping local. Local:', localMyAnswers.length, 'DB:', dbMyAnswers.length)
-              return prevState
-            }
-            
-            // Same progress - check other fields
-            const hasOtherChanges = 
-              loadedState.player1Score !== prevState.player1Score ||
-              loadedState.player2Score !== prevState.player2Score ||
-              loadedState.player1Finished !== prevState.player1Finished ||
-              loadedState.player2Finished !== prevState.player2Finished
-            
-            if (hasOtherChanges) {
-              // Merge: keep local answers if same length, but update other fields
-              const mergedState = {
-                ...loadedState,
-                player1Answers: prevState.player1Answers.length >= loadedState.player1Answers.length 
-                  ? prevState.player1Answers 
-                  : loadedState.player1Answers,
-                player2Answers: prevState.player2Answers.length >= loadedState.player2Answers.length 
-                  ? prevState.player2Answers 
-                  : loadedState.player2Answers
+          // CRITICAL: Ensure questions are loaded - if missing, game won't work
+          if (!loadedState.questions || loadedState.questions.length === 0) {
+            console.error('❌ Loaded game state has no questions! This will cause the game to break.')
+            // Don't use this state - let it fall through to generate new questions
+          } else {
+            // Update state - always use the database state as source of truth
+            // But preserve local state if it has more recent answers (to prevent race conditions)
+            setGameState(prevState => {
+              if (!prevState) {
+                // First load - use database state
+                const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+                setMyCurrentQuestionIndex(myAnswers.length)
+                return loadedState
               }
-              const myAnswers = isPlayer1 ? mergedState.player1Answers : mergedState.player2Answers
-              setMyCurrentQuestionIndex(myAnswers.length)
-              return mergedState
-            }
             
-            // No changes - keep previous state
-            return prevState
-          })
+              // Check if database state has more progress than local state
+              const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+              const localMyAnswers = isPlayer1 ? prevState.player1Answers : prevState.player2Answers
+              
+              // Use database state if it has more answers (more up-to-date)
+              if (dbMyAnswers.length > localMyAnswers.length) {
+                console.log('✅ Database has more progress, updating state. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
+                setMyCurrentQuestionIndex(dbMyAnswers.length)
+                return loadedState
+              }
+              
+              // If local state has more answers, keep it (it's more recent)
+              if (localMyAnswers.length > dbMyAnswers.length) {
+                console.log('⚠️ Local state has more progress, keeping local. Local:', localMyAnswers.length, 'DB:', dbMyAnswers.length)
+                return prevState
+              }
+              
+              // Same progress - check other fields
+              const hasOtherChanges = 
+                loadedState.player1Score !== prevState.player1Score ||
+                loadedState.player2Score !== prevState.player2Score ||
+                loadedState.player1Finished !== prevState.player1Finished ||
+                loadedState.player2Finished !== prevState.player2Finished
+              
+              if (hasOtherChanges) {
+                // Merge: keep local answers if same length, but update other fields
+                const mergedState = {
+                  ...loadedState,
+                  player1Answers: prevState.player1Answers.length >= loadedState.player1Answers.length 
+                    ? prevState.player1Answers 
+                    : loadedState.player1Answers,
+                  player2Answers: prevState.player2Answers.length >= loadedState.player2Answers.length 
+                    ? prevState.player2Answers 
+                    : loadedState.player2Answers
+                }
+                const myAnswers = isPlayer1 ? mergedState.player1Answers : mergedState.player2Answers
+                setMyCurrentQuestionIndex(myAnswers.length)
+                return mergedState
+              }
+              
+              // No changes - keep previous state
+              return prevState
+            })
+          }
           
           // Check if both finished - always check for finalResult
           if (loadedState.player1Finished && loadedState.player2Finished) {
@@ -294,114 +301,13 @@ export default function MultiplayerTriviaChallenge({
             return
           }
           
-          // Initialize new game
-          const questions: TriviaQuestion[] = []
-          const usedQuestionIds = new Set<string>()
+          // Initialize new game using helper function (similar to Math Blitz pattern)
+          console.log(`🎯 Initializing trivia game for category: ${categoryFromMatch || 'All Categories'}`)
           
-          console.log(`🎯 Loading questions for category: ${categoryFromMatch || 'All Categories'}`)
+          const { initializeMultiplayerTriviaGame } = await import('@/lib/game-logic')
+          const initialState = await initializeMultiplayerTriviaGame(matchId, categoryFromMatch, TOTAL_QUESTIONS)
           
-          for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-            let q: TriviaQuestion | null = null
-            let attempts = 0
-            const maxAttempts = 10
-            
-            // Try to get a question from database that matches category and isn't a duplicate
-            while (attempts < maxAttempts) {
-              q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
-              
-              // Check if we got a valid question that's not a duplicate
-              if (q && !usedQuestionIds.has(q.question) && !questions.some(existing => existing.question === q!.question)) {
-                // If category is specified, prefer matching category but don't require it
-                if (!categoryFromMatch || q.category === categoryFromMatch) {
-                  break // Found a good question
-                } else if (attempts >= 5) {
-                  // After 5 attempts, accept any question even if category doesn't match
-                  console.warn(`Using question from category ${q.category} as fallback for ${categoryFromMatch} after ${attempts} attempts`)
-                  break
-                }
-              }
-              
-              attempts++
-              q = null // Reset for next attempt
-            }
-            
-            // If database failed, use local fallback
-            if (!q) {
-              const { getRandomTriviaQuestion, triviaQuestions } = await import('@/lib/game-logic')
-              
-              // Try to get a local question matching the category
-              if (categoryFromMatch) {
-                const filtered = triviaQuestions.filter(
-                  localQ => localQ.category === categoryFromMatch && 
-                  !usedQuestionIds.has(localQ.question) &&
-                  !questions.some(existing => existing.question === localQ.question)
-                )
-                if (filtered.length > 0) {
-                  q = filtered[Math.floor(Math.random() * filtered.length)]
-                }
-              }
-              
-              // If no category match, use any unused local question
-              if (!q) {
-                const unused = triviaQuestions.filter(
-                  localQ => !usedQuestionIds.has(localQ.question) &&
-                  !questions.some(existing => existing.question === localQ.question)
-                )
-                if (unused.length > 0) {
-                  q = unused[Math.floor(Math.random() * unused.length)]
-                } else {
-                  // Last resort: use any question (even if duplicate)
-                  q = getRandomTriviaQuestion()
-                }
-              }
-            }
-            
-            // Always add a question - never skip
-            if (q) {
-              usedQuestionIds.add(q.question)
-              questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
-            } else {
-              // Absolute last resort: create a placeholder question
-              console.error(`CRITICAL: Could not load any question for index ${i + 1}`)
-              const { getRandomTriviaQuestion } = await import('@/lib/game-logic')
-              const emergencyQ = getRandomTriviaQuestion()
-              usedQuestionIds.add(emergencyQ.question)
-              questions.push({ ...emergencyQ, timeLimit: QUESTION_TIME_LIMIT })
-            }
-          }
-          
-          // If we have no questions at all, fall back to generating random questions
-          if (questions.length === 0) {
-            console.error('Failed to load any questions, using fallback')
-            // Generate fallback questions
-            for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-              const { getRandomTriviaQuestion, triviaQuestions } = await import('@/lib/game-logic')
-              const q = getRandomTriviaQuestion()
-              questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
-            }
-          }
-          
-          console.log(`✅ Loaded ${questions.length} questions for game with category: ${categoryFromMatch || 'All Categories'}`)
-          
-          // Verify all questions are from the correct category
-          if (categoryFromMatch) {
-            const wrongCategoryQuestions = questions.filter(q => q.category !== categoryFromMatch)
-            if (wrongCategoryQuestions.length > 0) {
-              console.error(`⚠️ Warning: ${wrongCategoryQuestions.length} questions don't match category ${categoryFromMatch}`)
-            }
-          }
-          
-          const initialState: MultiplayerTriviaState = {
-            questions,
-            currentQuestionIndex: 0,
-            player1Score: 0,
-            player2Score: 0,
-            player1Answers: [],
-            player2Answers: [],
-            player1Finished: false,
-            player2Finished: false,
-            gameStartTime: Date.now()
-          }
+          console.log(`✅ Initialized trivia game with ${initialState.questions.length} questions`)
           
           setGameState(initialState)
           setMyCurrentQuestionIndex(0)
