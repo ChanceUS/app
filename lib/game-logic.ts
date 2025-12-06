@@ -803,29 +803,33 @@ export async function generateSynchronizedTriviaQuestions(
   }
   
   // Try to get questions from database first, then fall back to local
+  // IMPORTANT: Always generate exactly `count` questions - never skip
   for (let i = 0; i < count; i++) {
     let q: TriviaQuestion | null = null
     
-    // Try database first (max 2 attempts per question to avoid delays)
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        q = await getRandomTriviaQuestionFromDB(undefined, category || undefined)
-        
-        // Check if valid and not duplicate
-        if (q && !usedQuestionIds.has(q.question) && !questions.some(existing => existing.question === q!.question)) {
-          // Accept if category matches OR if no category specified
-          if (!category || q.category === category) {
-            break // Found a good question
-          }
+    // Try database first (only 1 attempt to avoid delays - we'll fall back to local quickly)
+    try {
+      q = await getRandomTriviaQuestionFromDB(undefined, category || undefined)
+      
+      // Check if valid and not duplicate
+      if (q && !usedQuestionIds.has(q.question) && !questions.some(existing => existing.question === q!.question)) {
+        // Accept if category matches OR if no category specified OR if we've tried too many times
+        if (!category || q.category === category) {
+          // Good question - use it
+        } else {
+          // Category doesn't match - reject and fall back to local
+          q = null
         }
-        q = null
-      } catch (error) {
-        // Database failed, will use local fallback
+      } else {
+        // Duplicate or invalid - reject
         q = null
       }
+    } catch (error) {
+      // Database failed - will use local fallback
+      q = null
     }
     
-    // If database failed, use local questions
+    // If database failed or returned wrong category, use local questions
     if (!q) {
       // Try to get a local question matching the category
       if (category) {
@@ -850,23 +854,29 @@ export async function generateSynchronizedTriviaQuestions(
         }
       }
       
-      // Last resort: use any question (even if duplicate)
+      // If still no question, use any local question (even if duplicate or wrong category)
       if (!q) {
         q = getRandomTriviaQuestion(category || undefined)
+        // Remove from usedQuestionIds if it was there (to allow reuse if necessary)
+        usedQuestionIds.delete(q.question)
       }
     }
     
-    // Always add the question - never skip
+    // ALWAYS add a question - this should never fail
     if (q) {
       usedQuestionIds.add(q.question)
-      questions.push({ ...q, timeLimit: 45 }) // Default time limit
+      questions.push({ ...q, timeLimit: 45 })
+      console.log(`✅ Generated question ${i + 1}/${count}: ${q.question.substring(0, 50)}... (Category: ${q.category})`)
     } else {
-      // Emergency fallback (should never happen)
+      // This should NEVER happen, but if it does, use emergency fallback
+      console.error(`❌ CRITICAL: Could not generate question ${i + 1}/${count}, using emergency fallback`)
       const emergencyQ = getRandomTriviaQuestion(category || undefined)
       usedQuestionIds.add(emergencyQ.question)
       questions.push({ ...emergencyQ, timeLimit: 45 })
     }
   }
+  
+  console.log(`✅ Generated ${questions.length} questions total (requested: ${count})`)
   
   return questions
 }

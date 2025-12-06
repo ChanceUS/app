@@ -47,9 +47,11 @@ export default function MultiplayerTriviaChallenge({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [categorySelected, setCategorySelected] = useState(false)
   const [hasExistingGameState, setHasExistingGameState] = useState(false)
+  const isInitializingRef = useRef(false)
   const answerSubmittedRef = useRef(false)
   const timerActiveRef = useRef(false)
   const lastAnswerCountRef = useRef(0)
+  const handleAnswerRef = useRef<((selectedAnswerIndex: number) => Promise<void>) | null>(null)
   
   // Rematch state
   const [isTournamentMatch, setIsTournamentMatch] = useState(false)
@@ -72,6 +74,22 @@ export default function MultiplayerTriviaChallenge({
   // Save game state to database
   const saveGameStateToDatabase = useCallback(async (state: MultiplayerTriviaState, finalResult?: TriviaResult) => {
     try {
+      // CRITICAL: Ensure questions are always included in the state
+      if (!state.questions || state.questions.length === 0) {
+        console.error('❌ CRITICAL: Attempted to save state without questions! State:', state)
+        // If we have local questions, use them
+        if (gameState && gameState.questions && gameState.questions.length > 0) {
+          console.log('✅ Using local questions instead')
+          state = {
+            ...state,
+            questions: gameState.questions
+          }
+        } else {
+          console.error('❌ No questions available locally either! Cannot save.')
+          return
+        }
+      }
+      
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       
@@ -196,6 +214,29 @@ export default function MultiplayerTriviaChallenge({
           setCategorySelected(true)
         }
         
+        // CRITICAL: If we already have local gameState with questions, don't re-initialize
+        // This prevents race conditions where polling happens before save completes
+        if (gameState && gameState.questions && gameState.questions.length > 0) {
+          // We have local state with questions - only update if database has more progress
+          if (matchData?.game_data?.gameState) {
+            const loadedState = matchData.game_data.gameState as MultiplayerTriviaState
+            const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+            const localMyAnswers = isPlayer1 ? gameState.player1Answers : gameState.player2Answers
+            
+            // Only update if database has more answers (more progress)
+            if (dbMyAnswers.length > localMyAnswers.length) {
+              console.log('🔄 Database has more progress, updating from DB. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
+              // Merge: keep local questions but update answers/scores
+              setGameState({
+                ...loadedState,
+                questions: gameState.questions // Keep local questions!
+              })
+              setMyCurrentQuestionIndex(dbMyAnswers.length)
+            }
+          }
+          return // Don't re-initialize if we already have questions!
+        }
+        
         if (matchData?.game_data?.gameState) {
           const loadedState = matchData.game_data.gameState as MultiplayerTriviaState
           console.log('🔄 Loaded trivia game state from database:', {
@@ -209,7 +250,17 @@ export default function MultiplayerTriviaChallenge({
           // CRITICAL: Ensure questions are loaded - if missing, game won't work
           if (!loadedState.questions || loadedState.questions.length === 0) {
             console.error('❌ Loaded game state has no questions! This will cause the game to break.')
+            // If we already have local questions, keep them and just update answers/scores
+            if (gameState && gameState.questions && gameState.questions.length > 0) {
+              console.log('✅ We have local questions, keeping them and merging with DB state')
+              setGameState({
+                ...loadedState,
+                questions: gameState.questions // Keep local questions!
+              })
+              return // Exit early - don't re-initialize
+            }
             // Don't use this state - let it fall through to generate new questions
+            return // Exit early - don't try to use invalid state
           } else {
             // Update state - always use the database state as source of truth
             // But preserve local state if it has more recent answers (to prevent race conditions)
@@ -291,8 +342,8 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
           }
-        } else if (!gameState) {
-          // Only initialize if we don't have any state yet
+        } else if (!gameState && !isInitializingRef.current) {
+          // Only initialize if we don't have any state yet AND we're not already initializing
           // Get category from match data directly (more reliable than state)
           const categoryFromMatch = matchData?.game_data?.category || selectedCategory
           
@@ -301,35 +352,48 @@ export default function MultiplayerTriviaChallenge({
             return
           }
           
+          // Prevent multiple simultaneous initializations
+          isInitializingRef.current = true
+          
           // Initialize new game using helper function (similar to Math Blitz pattern)
           console.log(`🎯 Initializing trivia game for category: ${categoryFromMatch || 'All Categories'}`)
           
-          const { initializeMultiplayerTriviaGame } = await import('@/lib/game-logic')
-          const initialState = await initializeMultiplayerTriviaGame(matchId, categoryFromMatch, TOTAL_QUESTIONS)
-          
-          console.log(`✅ Initialized trivia game with ${initialState.questions.length} questions`)
-          
-          setGameState(initialState)
-          setMyCurrentQuestionIndex(0)
-          
-          if (player1Id && player2Id) {
-            setMatchReady(true)
-            setBothPlayersReady(true)
+          try {
+            const { initializeMultiplayerTriviaGame } = await import('@/lib/game-logic')
+            const initialState = await initializeMultiplayerTriviaGame(matchId, categoryFromMatch, TOTAL_QUESTIONS)
             
-            // Save initial state
-            await saveGameStateToDatabase(initialState)
-            // Also save category to match data if we have it
-            if (categoryFromMatch) {
-              await supabase
-                .from('matches')
-                .update({
-                  game_data: {
-                    ...matchData?.game_data,
-                    category: categoryFromMatch
-                  }
-                })
-                .eq('id', matchId)
+            console.log(`✅ Initialized trivia game with ${initialState.questions.length} questions`)
+            console.log(`📋 Questions:`, initialState.questions.map((q, i) => `${i + 1}. ${q.question.substring(0, 50)}... (${q.category})`))
+            
+            // Verify we have exactly the right number of questions
+            if (initialState.questions.length !== TOTAL_QUESTIONS) {
+              console.error(`❌ CRITICAL: Expected ${TOTAL_QUESTIONS} questions but got ${initialState.questions.length}`)
             }
+            
+            setGameState(initialState)
+            setMyCurrentQuestionIndex(0)
+            
+            if (player1Id && player2Id) {
+              setMatchReady(true)
+              setBothPlayersReady(true)
+              
+              // Save initial state
+              await saveGameStateToDatabase(initialState)
+              // Also save category to match data if we have it
+              if (categoryFromMatch) {
+                await supabase
+                  .from('matches')
+                  .update({
+                    game_data: {
+                      ...matchData?.game_data,
+                      category: categoryFromMatch
+                    }
+                  })
+                  .eq('id', matchId)
+              }
+            }
+          } finally {
+            isInitializingRef.current = false
           }
         }
       } catch (error) {
@@ -380,7 +444,7 @@ export default function MultiplayerTriviaChallenge({
         setTimeRemaining(question.timeLimit || QUESTION_TIME_LIMIT)
         setLocalAnswerSubmitted(false)
         answerSubmittedRef.current = false
-        timerActiveRef.current = false
+        // Don't set timerActiveRef to false here - let the timer useEffect handle it
         setMyCurrentQuestionIndex(nextQuestionIndex)
       }
     }
@@ -465,35 +529,41 @@ export default function MultiplayerTriviaChallenge({
     }
     
     // Reset timer and flags when question changes
-    setTimeRemaining(currentQuestion.timeLimit || QUESTION_TIME_LIMIT)
+    const timeLimit = currentQuestion.timeLimit || QUESTION_TIME_LIMIT
+    setTimeRemaining(timeLimit)
     answerSubmittedRef.current = false
     timerActiveRef.current = true
     
+    console.log('⏰ Starting timer for question:', currentQuestion.question.substring(0, 50), 'Time limit:', timeLimit)
+    
     const timer = setInterval(() => {
-      // Check if answer was already submitted
+      // Check if answer was already submitted or timer is disabled
       if (answerSubmittedRef.current || !timerActiveRef.current) {
         return
       }
       
       setTimeRemaining(prev => {
-        if (prev <= 1) {
+        const newTime = prev - 1
+        if (newTime <= 0) {
           // Timeout - submit no answer only if not already submitted
-          if (!answerSubmittedRef.current && timerActiveRef.current) {
+          if (!answerSubmittedRef.current && timerActiveRef.current && handleAnswerRef.current) {
+            console.log('⏰ Timeout! Auto-submitting no answer')
             answerSubmittedRef.current = true
             timerActiveRef.current = false
-            handleAnswer(-1) // Timeout
+            handleAnswerRef.current(-1) // Timeout
           }
           return 0
         }
-        return prev - 1
+        return newTime
       })
     }, 1000)
     
     return () => {
+      console.log('⏰ Clearing timer')
       clearInterval(timer)
       timerActiveRef.current = false
     }
-  }, [matchReady, currentQuestion, gameResult, handleAnswer])
+  }, [matchReady, currentQuestion?.question, gameResult]) // Removed handleAnswer from deps to prevent constant restarts
 
   // Calculate trivia result
   const calculateTriviaResult = (state: MultiplayerTriviaState): TriviaResult => {
