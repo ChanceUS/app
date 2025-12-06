@@ -1108,34 +1108,20 @@ export default function EnhancedMatchInterface({
           
           const winnings = match.bet_amount * 2 // Both players' bets
           
-          // Get current tokens for the winner
-          const { data: winnerData } = await supabase
-            .from('users')
-            .select('tokens')
-            .eq('id', winnerId)
-            .single()
+          // IMPORTANT: Only create transaction record - the database trigger will automatically update the user's token balance
+          // This prevents double-payout (direct update + trigger update)
+          const { error: transactionError } = await supabase.from('transactions').insert({
+            user_id: winnerId,
+            match_id: match.id,
+            amount: winnings,
+            type: 'win',
+            description: `Won match - ${winnings} tokens`
+          })
           
-          if (winnerData) {
-            // Update winner's tokens
-            const { error: updateError } = await supabase
-              .from('users')
-              .update({ tokens: (winnerData.tokens || 0) + winnings })
-              .eq('id', winnerId)
-            
-            if (updateError) {
-              console.error('❌ Failed to update winner tokens:', updateError)
-            } else {
-              console.log('✅ Winner tokens updated successfully')
-              
-              // Create transaction record
-              await supabase.from('transactions').insert({
-                user_id: winnerId,
-                match_id: match.id,
-                amount: winnings,
-                type: 'win',
-                description: `Won match - ${winnings} tokens`
-              })
-            }
+          if (transactionError) {
+            console.error('❌ Failed to create winner transaction:', transactionError)
+          } else {
+            console.log('✅ Winner transaction created successfully - trigger will update balance')
           }
         } catch (payoutError) {
           console.error('❌ Failed to process winner payout:', payoutError)
@@ -1505,17 +1491,52 @@ export default function EnhancedMatchInterface({
   return (
     <Card className="bg-gray-900/50 border-orange-500/20">
       <CardHeader>
+        {/* Match Title and Info */}
+        <div className="mb-4 pb-4 border-b border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-white text-xl flex items-center">
+                <Trophy className="mr-2 h-5 w-5 text-orange-400" />
+                {game?.name || 'Game'} Match
+              </CardTitle>
+              <p className="text-gray-400 text-sm mt-1">Match #{match.id.slice(0, 8)}</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Badge className="bg-orange-500/20 text-orange-400 text-sm px-3 py-1">
+                <Trophy className="mr-1 h-3 w-3" />
+                {match.bet_amount * 2} tokens
+              </Badge>
+              <Badge
+                className={`text-sm px-3 py-1 ${
+                  match.status === "waiting"
+                    ? "bg-yellow-500/20 text-yellow-400"
+                    : match.status === "in_progress"
+                    ? "bg-green-500/20 text-green-400"
+                    : match.status === "completed"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "bg-gray-500/20 text-gray-400"
+                }`}
+              >
+                {match.status === "waiting" ? "Waiting" : 
+                 match.status === "in_progress" ? "In Progress" : 
+                 match.status === "completed" ? "Completed" : "Cancelled"}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Match Status Section */}
         <div className="flex items-center justify-between">
-          <CardTitle className="text-white flex items-center">
-            <Users className="mr-2 h-5 w-5 text-orange-400" />
+          <CardTitle className="text-white flex items-center text-base">
+            <Users className="mr-2 h-4 w-4 text-orange-400" />
             Match Status
           </CardTitle>
-                 <div className="flex items-center space-x-2">
-                   <Badge className="bg-blue-500/20 text-blue-400">
-                     <div className="w-2 h-2 rounded-full mr-2 bg-blue-400" />
-                     Polling
-                   </Badge>
-            <Badge className="bg-orange-500/20 text-orange-400">
+          <div className="flex items-center space-x-2">
+            <Badge className="bg-blue-500/20 text-blue-400 text-xs">
+              <div className="w-2 h-2 rounded-full mr-2 bg-blue-400" />
+              Polling
+            </Badge>
+            <Badge className="bg-orange-500/20 text-orange-400 text-xs">
               {match.bet_amount} tokens
             </Badge>
           </div>

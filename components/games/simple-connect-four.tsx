@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { sendFriendRequest, getFriends, getSentRequests, getPendingRequests, acceptFriendRequest } from "@/lib/friends-actions"
+import { completeMatch } from "@/lib/complete-match-action"
+import { deductMatchTokens } from "@/lib/deduct-match-tokens"
 import { UserPlus, CheckCircle, Clock } from "lucide-react"
 
 interface SimpleConnectFourProps {
@@ -25,6 +27,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
   const [winner, setWinner] = useState<'player1' | 'player2' | 'draw' | null>(null)
   const isProcessingMoveRef = useRef(false)
   const boardRef = useRef<(string | null)[]>(Array(42).fill(null))
+  const matchCompletedAtRef = useRef<number | null>(null) // Track when match was completed to prevent immediate rematch checks
   const [playerNames, setPlayerNames] = useState<{player1: string, player2: string}>({player1: 'Player 1', player2: 'Player 2'})
   
   // Move history for viewing previous moves
@@ -329,8 +332,13 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         }
 
         // Check for rematch requests (only if not a tournament match)
-        if (currentStatus === 'completed' && currentUserId && !tournamentMatch) {
-          console.log('🔍 Checking for rematch requests...', { currentStatus, currentUserId, matchId })
+        // Don't check immediately after match completion - wait at least 5 seconds
+        const timeSinceCompletion = matchCompletedAtRef.current 
+          ? Date.now() - matchCompletedAtRef.current 
+          : Infinity
+        
+        if (currentStatus === 'completed' && currentUserId && !tournamentMatch && timeSinceCompletion > 5000) {
+          console.log('🔍 Checking for rematch requests...', { currentStatus, currentUserId, matchId, timeSinceCompletion })
           // First, check if there are any new matches created recently that might be rematches
           const { data: recentMatches } = await supabase
             .from('matches')
@@ -343,28 +351,37 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           
           if (recentMatches && recentMatches.length > 0) {
             console.log('🔍 Found recent matches that might be rematches:', recentMatches)
-            // If we find a very recent match, redirect to it
+            // If we find a very recent match, redirect to it (but only if it's been at least 10 seconds since completion)
             const mostRecentMatch = recentMatches[0]
             const matchAge = Date.now() - new Date(mostRecentMatch.created_at).getTime()
-            if (matchAge < 30000) { // Less than 30 seconds old
+            if (matchAge < 30000 && timeSinceCompletion > 10000) { // Less than 30 seconds old, and at least 10 seconds since completion
               console.log('🔄 Found very recent match, redirecting to:', mostRecentMatch.id)
               window.location.href = `/games/match/${mostRecentMatch.id}`
               return
             }
           }
-          const { data: rematchHistory, error: rematchError } = await supabase
-            .from('match_history')
-            .select('*')
-            .eq('match_id', matchId)
-            .in('action_type', ['rematch_requested', 'rematch_accepted', 'rematch_rejected'])
-            .order('created_at', { ascending: false })
+          // Skip match_history query - it often fails due to RLS and we have game_data as primary source
+          // This prevents console spam from empty error objects
+          let rematchHistory = null
+          let rematchError = null
           
-          // Log the specific error if there is one
-          if (rematchError) {
-            console.error('🔍 Rematch history query failed:', rematchError)
+          // Only try match_history if really needed (currently we use game_data as primary source)
+          // Commented out to prevent RLS errors from spamming console
+          /*
+          try {
+            const result = await supabase
+              .from('match_history')
+              .select('*')
+              .eq('match_id', matchId)
+              .in('action_type', ['rematch_requested', 'rematch_accepted', 'rematch_rejected'])
+              .order('created_at', { ascending: false })
+            
+            rematchHistory = result.data
+            rematchError = result.error
+          } catch (err) {
+            rematchError = err as any
           }
-          
-          console.log('🔍 Rematch history query result:', { rematchHistory, matchId, hasError: !!rematchError })
+          */
           
           // Also check matches table for rematch requests stored in game_data
           const { data: matchData, error: matchDataError } = await supabase
@@ -373,7 +390,10 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             .eq('id', matchId)
             .single()
           
-          console.log('🔍 Match data check:', { matchData, matchDataError })
+          // Only log match data errors if they're real issues
+          if (matchDataError && matchDataError.message) {
+            console.warn('⚠️ Failed to load match data for rematch check:', matchDataError.message)
+          }
           
           let rematchRequestedBy = null
           let rematchRequestedAt = null
@@ -468,10 +488,29 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         }
 
         if (data) {
-          // Update status if changed
+          // If match is completed locally, don't allow polling to reset state
+          // Only update if status changes from in_progress to completed
+          if (currentStatus === 'completed' && data.status === 'completed') {
+            // Match is already completed - only update winner if we don't have one yet
+            if (!winner && data.winner_id) {
+              if (data.winner_id === data.player1_id) {
+                setWinner('player1')
+              } else if (data.winner_id === data.player2_id) {
+                setWinner('player2')
+              }
+            }
+            // Don't update anything else for completed matches
+            return
+          }
+          
+          // Update status if changed (only if not already completed)
           if (data.status !== currentStatus) {
             console.log('Status changed from', currentStatus, 'to', data.status)
             setCurrentStatus(data.status)
+            // Track when match was completed to prevent immediate rematch checks
+            if (data.status === 'completed' && currentStatus !== 'completed') {
+              matchCompletedAtRef.current = Date.now()
+            }
           }
 
           // Update game state if available
@@ -506,13 +545,13 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
               }
             }
             
-            // Update current player if different
-            if (gameData.currentPlayer !== undefined && gameData.currentPlayer !== currentPlayer) {
+            // Only update current player if match is still in progress
+            if (data.status === 'in_progress' && gameData.currentPlayer !== undefined && gameData.currentPlayer !== currentPlayer) {
               setCurrentPlayer(gameData.currentPlayer)
             }
             
-            // Update winner if different
-            if (gameData.winner !== undefined && gameData.winner !== winner) {
+            // Update winner if different and match is completed
+            if (data.status === 'completed' && gameData.winner !== undefined && gameData.winner !== winner) {
               setWinner(gameData.winner)
             }
           }
@@ -641,6 +680,26 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         setBoard(newBoard)
         boardRef.current = newBoard // Update ref immediately
         
+        // Check for winner BEFORE saving to database to avoid race conditions
+        const hasWinner = checkWinner(newBoard, row, column, currentPlayer)
+        const isBoardFull = newBoard.every(cell => cell !== null)
+        
+        let determinedWinner: 'player1' | 'player2' | null = null
+        if (hasWinner) {
+          determinedWinner = currentPlayer
+        } else if (isBoardFull) {
+          // Count pieces for each player
+          let player1Count = 0
+          let player2Count = 0
+          for (let i = 0; i < newBoard.length; i++) {
+            if (newBoard[i] === 'player1') player1Count++
+            else if (newBoard[i] === 'player2') player2Count++
+          }
+          // Player with more pieces wins (in Connect Four, players alternate, so counts should be close)
+          // If still tied, player1 wins by default (ensures no ties)
+          determinedWinner = player1Count >= player2Count ? 'player1' : 'player2'
+        }
+        
         // Add move to history with proper move number
         const newMoveNumber = moveHistory.length + 1
         const newMove = {
@@ -667,54 +726,145 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           return [...prev, newMove]
         })
         
-        // Save to database for opponent sync
+        // Save to database - include winner if game is over
         const nextPlayer = currentPlayer === 'player1' ? 'player2' : 'player1'
         try {
           const supabase = createClient()
-          const { error } = await supabase
-            .from('matches')
-            .update({
-              game_data: {
-                board: newBoard,
-                currentPlayer: nextPlayer, // Switch for next turn
-                winner: null
-              }
-            })
-            .eq('id', matchId)
           
-          if (error) {
-            console.error('Failed to save move to database:', error)
-            // Revert local change if database save failed
-            setBoard(currentBoard)
-            boardRef.current = currentBoard
+          if (determinedWinner) {
+            // Game is over - save winner and mark match as completed in one update
+            setWinner(determinedWinner)
+            setCurrentStatus('completed')
+            matchCompletedAtRef.current = Date.now() // Track when match was completed
+            
+            // Validate player IDs before saving
+            const winnerId = determinedWinner === 'player1' ? player1Id : player2Id
+            if (!winnerId) {
+              console.error('❌ Cannot save winner: player ID is missing', {
+                determinedWinner,
+                player1Id,
+                player2Id
+              })
+              // Don't revert - the game is still won locally
+              isProcessingMoveRef.current = false
+              return
+            }
+            
+            // Use server action to complete match (handles RLS and replay creation)
+            const gameData = {
+              board: newBoard,
+              currentPlayer: currentPlayer,
+              winner: determinedWinner
+            }
+            
+            try {
+              const result = await completeMatch(matchId, winnerId, gameData)
+              
+              if (!result || !result.success) {
+                console.error('❌ Failed to save winner via server action:', {
+                  result,
+                  matchId,
+                  winnerId,
+                  determinedWinner
+                })
+                // Don't revert board - the game is won, just log the error
+                // The polling will eventually sync the state
+                isProcessingMoveRef.current = false
+                return
+              }
+              
+              console.log('✅ Match completed and saved to database via server action:', result)
+            } catch (err) {
+              // Catch any unexpected errors (network, serialization, etc.)
+              console.error('❌ Unexpected error saving winner:', {
+                error: err,
+                errorType: typeof err,
+                errorString: String(err),
+                matchId,
+                winnerId,
+                determinedWinner
+              })
+              // Don't revert - game is won
+              isProcessingMoveRef.current = false
+              return
+            }
+            
+            // Save move to history
+            const { error: historyError } = await supabase
+              .from('match_history')
+              .insert({
+                match_id: matchId,
+                user_id: currentUserId,
+                action_type: 'move_made',
+                action_data: {
+                  board: newBoard,
+                  column: column,
+                  player: currentPlayer,
+                  move: column,
+                  timestamp: new Date().toISOString()
+                }
+              })
+            
+            if (historyError) {
+              console.error('Failed to save move to history:', historyError)
+            } else {
+              console.log('✅ Move saved to match history')
+              loadMoveHistoryFromDB()
+            }
+            
+            // Reset processing flag
             isProcessingMoveRef.current = false
             return
-          }
-          
-          console.log('✅ Move saved to database for opponent sync')
-          
-          // Also save to match history for move tracking
-          const { error: historyError } = await supabase
-            .from('match_history')
-            .insert({
-              match_id: matchId,
-              user_id: currentUserId,
-              action_type: 'move_made',
-              action_data: {
-                board: newBoard,
-                column: column,
-                player: currentPlayer,
-                move: column,
-                timestamp: new Date().toISOString()
-              }
-            })
-          
-          if (historyError) {
-            console.error('Failed to save move to history:', historyError)
           } else {
-            console.log('✅ Move saved to match history')
-            // Reload move history to include the new move
-            loadMoveHistoryFromDB()
+            // Game continues - save move and switch player
+            const { error } = await supabase
+              .from('matches')
+              .update({
+                game_data: {
+                  board: newBoard,
+                  currentPlayer: nextPlayer, // Switch for next turn
+                  winner: null
+                }
+              })
+              .eq('id', matchId)
+            
+            if (error) {
+              console.error('Failed to save move to database:', error)
+              // Revert local change if database save failed
+              setBoard(currentBoard)
+              boardRef.current = currentBoard
+              isProcessingMoveRef.current = false
+              return
+            }
+            
+            console.log('✅ Move saved to database for opponent sync')
+            
+            // Also save to match history for move tracking
+            const { error: historyError } = await supabase
+              .from('match_history')
+              .insert({
+                match_id: matchId,
+                user_id: currentUserId,
+                action_type: 'move_made',
+                action_data: {
+                  board: newBoard,
+                  column: column,
+                  player: currentPlayer,
+                  move: column,
+                  timestamp: new Date().toISOString()
+                }
+              })
+            
+            if (historyError) {
+              console.error('Failed to save move to history:', historyError)
+            } else {
+              console.log('✅ Move saved to match history')
+              // Reload move history to include the new move
+              loadMoveHistoryFromDB()
+            }
+            
+            // Switch players
+            setCurrentPlayer(nextPlayer)
           }
         } catch (error) {
           console.error('Error saving move:', error)
@@ -724,75 +874,6 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           isProcessingMoveRef.current = false
           return
         }
-        
-        // Check for winner
-        if (checkWinner(newBoard, row, column, currentPlayer)) {
-          setWinner(currentPlayer)
-          setCurrentStatus('completed') // Update local status immediately
-          // Save winner and mark match as completed
-          try {
-            const supabase = createClient()
-            await supabase
-              .from('matches')
-              .update({
-                status: 'completed',
-                winner_id: currentPlayer === 'player1' ? player1Id : player2Id,
-                completed_at: new Date().toISOString(),
-                game_data: {
-                  board: newBoard,
-                  currentPlayer: currentPlayer,
-                  winner: currentPlayer
-                }
-              })
-              .eq('id', matchId)
-            console.log('✅ Match completed and winner saved to database')
-          } catch (error) {
-            console.error('Error saving winner:', error)
-          }
-          return
-        }
-        
-        // Check for board full - determine winner by piece count (no draws allowed)
-        if (newBoard.every(cell => cell !== null)) {
-          // Count pieces for each player
-          let player1Count = 0
-          let player2Count = 0
-          for (let i = 0; i < newBoard.length; i++) {
-            if (newBoard[i] === 'player1') player1Count++
-            else if (newBoard[i] === 'player2') player2Count++
-          }
-          
-          // Player with more pieces wins (in Connect Four, players alternate, so counts should be close)
-          // If still tied, player1 wins by default (ensures no ties)
-          const fullBoardWinner: 'player1' | 'player2' = player1Count >= player2Count ? 'player1' : 'player2'
-          
-          setWinner(fullBoardWinner)
-          setCurrentStatus('completed')
-          // Save winner and mark match as completed
-          try {
-            const supabase = createClient()
-            await supabase
-              .from('matches')
-              .update({
-                status: 'completed',
-                winner_id: fullBoardWinner === 'player1' ? player1Id : player2Id,
-                completed_at: new Date().toISOString(),
-                game_data: {
-                  board: newBoard,
-                  currentPlayer: currentPlayer,
-                  winner: fullBoardWinner
-                }
-              })
-              .eq('id', matchId)
-            console.log(`✅ Match completed - ${fullBoardWinner} wins (board full, P1: ${player1Count} pieces, P2: ${player2Count} pieces)`)
-          } catch (error) {
-            console.error('Error saving winner:', error)
-          }
-          return
-        }
-        
-        // Switch players
-        setCurrentPlayer(currentPlayer === 'player1' ? 'player2' : 'player1')
         
         // Reset processing flag after move is complete
         // Use a small timeout to ensure state updates have propagated
@@ -977,6 +1058,40 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         return
       }
       
+      // Check if both players have enough tokens before creating rematch
+      if (betAmount > 0) {
+        const { data: player1Data, error: player1Error } = await supabase
+          .from('users')
+          .select('tokens')
+          .eq('id', player1Id)
+          .single()
+        
+        const { data: player2Data, error: player2Error } = await supabase
+          .from('users')
+          .select('tokens')
+          .eq('id', player2Id)
+          .single()
+        
+        if (player1Error || player2Error) {
+          console.error('❌ Error checking player tokens:', { player1Error, player2Error })
+          alert('Failed to verify token balances. Cannot create rematch.')
+          setIsLoadingRematch(false)
+          return
+        }
+        
+        if (!player1Data || player1Data.tokens < betAmount) {
+          alert(`${playerNames.player1} doesn't have enough tokens for this rematch.`)
+          setIsLoadingRematch(false)
+          return
+        }
+        
+        if (!player2Data || player2Data.tokens < betAmount) {
+          alert(`${playerNames.player2} doesn't have enough tokens for this rematch.`)
+          setIsLoadingRematch(false)
+          return
+        }
+      }
+      
       // Create new match with same players and bet amount - AUTO START
       const { data: newMatch, error: matchError } = await supabase
         .from('matches')
@@ -1008,6 +1123,55 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         alert(`Failed to create rematch: ${matchError.message}`)
         setIsLoadingRematch(false)
         return
+      }
+      
+      // CRITICAL: Deduct tokens from both players BEFORE redirecting
+      // This MUST complete successfully - if it fails, we should not proceed
+      if (betAmount > 0 && newMatch && newMatch.id) {
+        console.log('💰 CRITICAL: Deducting tokens for rematch via server action:', { 
+          betAmount, 
+          player1Id, 
+          player2Id, 
+          matchId: newMatch.id 
+        })
+        
+        try {
+          const deductionResult = await deductMatchTokens(newMatch.id, player1Id, player2Id, betAmount)
+          
+          console.log('💰 Deduction result:', JSON.stringify(deductionResult, null, 2))
+          
+          if (!deductionResult) {
+            console.error('❌ Deduction result is null/undefined')
+            alert('CRITICAL: Token deduction failed - result was null. Rematch created but tokens not deducted.')
+            // Still proceed with redirect, but user is warned
+          } else if (!deductionResult.success) {
+            console.error('❌ Failed to deduct tokens for rematch:', deductionResult.error)
+            alert(`CRITICAL: Failed to deduct tokens: ${deductionResult.error}. Rematch created but tokens not deducted.`)
+            // Still proceed with redirect, but user is warned
+          } else if (deductionResult.alreadyDeducted) {
+            console.log('ℹ️ Tokens were already deducted for this match - this is OK')
+          } else {
+            console.log('✅ Tokens deducted successfully for rematch:', {
+              player1Balance: deductionResult.player1Balance,
+              player2Balance: deductionResult.player2Balance
+            })
+          }
+        } catch (tokenError: any) {
+          console.error('❌ CRITICAL: Unexpected error deducting tokens for rematch:', tokenError)
+          console.error('❌ Error details:', {
+            message: tokenError?.message,
+            stack: tokenError?.stack,
+            error: tokenError
+          })
+          alert(`CRITICAL ERROR: Token deduction failed: ${tokenError?.message || tokenError}. Rematch created but tokens may not have been deducted.`)
+          // Still proceed with redirect, but user is warned
+        }
+      } else {
+        const skipReason = !betAmount ? 'betAmount is 0' : !newMatch ? 'newMatch is null' : !newMatch.id ? 'newMatch.id is missing' : 'unknown'
+        console.warn('⚠️ CRITICAL: Skipping token deduction:', { betAmount, hasMatch: !!newMatch, matchId: newMatch?.id, reason: skipReason })
+        if (betAmount > 0) {
+          alert(`WARNING: Token deduction was skipped (${skipReason}). Rematch created but tokens were NOT deducted.`)
+        }
       }
       
       if (!newMatch || !newMatch.id) {
@@ -1121,6 +1285,29 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                         )}
                       </p>
                       <p>This match has finished.</p>
+                      
+                      {/* Show winnings if current user is the winner */}
+                      {winner !== 'draw' && betAmount > 0 && (
+                        <div className="mt-4 p-4 bg-green-900/30 border border-green-500/50 rounded-lg">
+                          {((winner === 'player1' && currentUserId === player1Id) || 
+                            (winner === 'player2' && currentUserId === player2Id)) ? (
+                            <div className="text-center">
+                              <p className="text-green-400 font-semibold text-lg">
+                                🎊 You Won {betAmount * 2} Tokens! 🎊
+                              </p>
+                              <p className="text-gray-300 text-sm mt-1">
+                                Net Profit: +{betAmount} tokens (after your initial {betAmount} token bet)
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-gray-400 text-sm">
+                                Winner received {betAmount * 2} tokens
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
                       
                       {/* Rematch Request Section - Only show for non-tournament matches */}

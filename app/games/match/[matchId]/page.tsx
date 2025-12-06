@@ -392,7 +392,7 @@ export default function MatchPage({ params }: MatchPageProps) {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Navigation */}
-        <div className="mb-6">
+        <div className="mb-4">
           {(match as any)?.tournament_id ? (
             <Link 
               href={`/tournaments/${(match as any).tournament_id}`}
@@ -408,42 +408,6 @@ export default function MatchPage({ params }: MatchPageProps) {
             </Link>
           )}
         </div>
-
-        {/* Match Header */}
-        <Card className="bg-gray-900/50 border-gray-800 mb-8">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-white text-2xl flex items-center">
-                  <Trophy className="mr-3 h-6 w-6 text-orange-400" />
-                  {match.games?.name || 'Math Blitz'} Match
-                </CardTitle>
-                <p className="text-gray-400 mt-2">Match #{match.id.slice(0, 8)}</p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Badge className="bg-orange-500/20 text-orange-400 text-lg px-4 py-2">
-                  <Trophy className="mr-2 h-4 w-6" />
-                  {match.bet_amount * 2} tokens
-                </Badge>
-                <Badge
-                  className={`${
-                    match.status === "waiting"
-                      ? "bg-yellow-500/20 text-yellow-400"
-                      : match.status === "in_progress"
-                      ? "bg-green-500/20 text-green-400"
-                      : match.status === "completed"
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "bg-gray-500/20 text-gray-400"
-                  }`}
-                >
-                  {match.status === "waiting" ? "Waiting" : 
-                   match.status === "in_progress" ? "In Progress" : 
-                   match.status === "completed" ? "Completed" : "Cancelled"}
-                </Badge>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
 
         {/* Start Match Button - Show for both players when match is waiting */}
         {match.status === "waiting" && (
@@ -558,7 +522,7 @@ export default function MatchPage({ params }: MatchPageProps) {
         )}
 
         {/* Game Interface and Chat */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
           {/* Game Interface - Takes 2 columns on large screens */}
           <div className="lg:col-span-2">
             <EnhancedMatchInterface

@@ -11,10 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, User, Wallet, Coins, Gamepad2, Menu, Trophy, MessageSquare, Users } from "lucide-react"
+import { LogOut, Settings, User, Wallet, Coins, Gamepad2, Menu, Trophy, MessageSquare, Users, Eye } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/lib/actions"
 import type { User as UserType } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import {
   Sheet,
@@ -29,14 +30,67 @@ interface HeaderProps {
 }
 
 export default function Header({ user }: HeaderProps) {
+  const [tokenCount, setTokenCount] = useState(user?.tokens || 0)
+  
   // Debug logging (only log once)
   useEffect(() => {
     if (user) {
       console.log("🔍 DEBUG: Header received user:", user.username, "Tokens:", user.tokens)
+      setTokenCount(user.tokens || 0)
     }
   }, [user?.id]) // Only log when user ID changes
   
-  const tokenCount = user?.tokens || 0
+  // Subscribe to real-time token updates
+  useEffect(() => {
+    if (!user?.id) return
+    
+    const supabase = createClient()
+    
+    // Subscribe to user token updates
+    const channel = supabase
+      .channel(`user-tokens-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `id=eq.${user.id}`
+        },
+        (payload) => {
+          const updatedUser = payload.new as any
+          if (updatedUser.tokens !== undefined) {
+            console.log('💰 Token balance updated:', updatedUser.tokens)
+            setTokenCount(updatedUser.tokens)
+          }
+        }
+      )
+      .subscribe()
+    
+    // Also poll for updates every 2 seconds as a backup
+    const pollInterval = setInterval(async () => {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tokens')
+        .eq('id', user.id)
+        .single()
+      
+      if (userData) {
+        setTokenCount(prev => {
+          if (userData.tokens !== prev) {
+            console.log('💰 Token balance updated via polling:', userData.tokens)
+            return userData.tokens
+          }
+          return prev
+        })
+      }
+    }, 2000)
+    
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
+    }
+  }, [user?.id])
   const displayName = user?.display_name || user?.username || "Guest"
   const username = user?.username || "guest"
   const avatarUrl = user?.avatar_url ?? null // only truthy if user actually has an avatar
@@ -95,6 +149,13 @@ export default function Header({ user }: HeaderProps) {
                 className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm"
               >
                 Chat
+              </Link>
+              <Link
+                href="/watch"
+                className="text-white hover:text-orange-500 transition-colors duration-200 font-medium text-sm flex items-center gap-1"
+              >
+                <Eye className="h-4 w-4" />
+                Watch
               </Link>
             </nav>
           )}
@@ -238,6 +299,13 @@ export default function Header({ user }: HeaderProps) {
                       >
                         <MessageSquare className="h-5 w-5" />
                         <span>Chat</span>
+                      </Link>
+                      <Link
+                        href="/watch"
+                        className="flex items-center space-x-3 px-4 py-3 rounded-lg text-white hover:bg-gray-800 transition-colors"
+                      >
+                        <Eye className="h-5 w-5" />
+                        <span>Watch</span>
                       </Link>
                       <div className="border-t border-gray-700 my-2"></div>
                       <Link

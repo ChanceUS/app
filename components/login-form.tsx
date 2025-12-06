@@ -92,13 +92,13 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
     const urlParams = new URLSearchParams(window.location.search)
     const error = urlParams.get('error')
     if (error) {
-      console.error("Login error from URL:", error)
-      
       // Show specific error messages
       let errorMessage = "Login failed. Please try again."
       
       if (error === 'rate_limit') {
-        errorMessage = "Rate limit exceeded. Please wait 15 minutes before trying again. Close all browser tabs and clear browser data."
+        errorMessage = "Rate limit exceeded. Please wait a few minutes before trying again."
+        // Log as warning since rate limiting is expected behavior
+        console.warn("Rate limit detected - user will be notified via toast")
       } else if (error === 'invalid_code') {
         errorMessage = "Login session expired. Please try logging in again."
       } else if (error === 'auth_error') {
@@ -107,6 +107,11 @@ export default function LoginForm({ redirectUrl }: LoginFormProps) {
       
       // Use toast instead of alert for better UX
       toast.error(errorMessage)
+      
+      // Clean up URL by removing error parameter
+      urlParams.delete('error')
+      const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '')
+      window.history.replaceState({}, '', newUrl)
     }
   }, [])
 
