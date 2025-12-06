@@ -312,14 +312,18 @@ export async function createRematchWithDeduction(
     })
 
     // Get the original match to copy category (for trivia games)
-    const { data: originalMatch } = await supabase
+    const { data: originalMatch, error: originalMatchError } = await supabase
       .from('matches')
       .select('game_data')
       .eq('id', originalMatchId)
       .single()
     
+    if (originalMatchError) {
+      console.error('❌ Error fetching original match for rematch:', originalMatchError)
+    }
+    
     const originalCategory = originalMatch?.game_data?.category
-    console.log('📋 Original match category for rematch:', originalCategory)
+    console.log('📋 Original match category for rematch:', originalCategory, 'Full game_data:', originalMatch?.game_data)
 
     // Verify both players have sufficient tokens
     const { data: player1Data, error: player1Error } = await supabase
@@ -360,7 +364,8 @@ export async function createRematchWithDeduction(
     } : isTrivia ? {
       // Trivia will initialize its own gameState when the component loads
       // Copy category from original match so rematch uses same category
-      ...(originalCategory ? { category: originalCategory } : {})
+      // Always include category field (even if null/undefined) so component knows it's a rematch
+      category: originalCategory || null
     } : {} // For other games, let the component initialize game_data
     
     if (isTrivia) {

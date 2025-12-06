@@ -351,11 +351,8 @@ export default function CreateMatchForm({ game, user }: CreateMatchFormProps) {
   const isTriviaGame = game.name?.toLowerCase().includes('trivia') || game.name?.toLowerCase().includes('trivia challenge')
   
   const triviaCategories = [
-    { name: 'Pop Culture', value: 'Pop Culture' },
     { name: 'Animals', value: 'Animals' },
-    { name: 'General Knowledge', value: 'General Knowledge' },
-    { name: 'Science', value: 'Science' },
-    { name: 'History', value: 'History' },
+    { name: 'Pop Culture', value: 'Pop Culture' },
     { name: 'Sports', value: 'Sports' }
   ]
 

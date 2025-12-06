@@ -11,7 +11,6 @@ import WinningList from "@/components/dashboard/winning-list"
 import { handleAuthError } from "@/lib/auth-fix"
 import { Wallet, Trophy, Users, TrendingUp } from "lucide-react"
 import Image from "next/image"
-import AddFriendsSection from "@/components/dashboard/add-friends-section"
 
 export default async function DashboardPage() {
   if (!isSupabaseConfigured) {
@@ -109,8 +108,6 @@ export default async function DashboardPage() {
           </div>
 
           <div className="space-y-6">
-            <AddFriendsSection />
-
             <div className="card-modern p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white">Recent Winners</h3>

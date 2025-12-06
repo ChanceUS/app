@@ -82,6 +82,16 @@ function generateBracketPositions(participantCount: number, round: number): numb
   return Array.from({ length: previousRoundWinners }, (_, i) => i + 1)
 }
 
+// Fisher-Yates shuffle algorithm for random pairing
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
 // Create a new tournament
 export async function createTournament(
   gameId: string,
@@ -357,12 +367,16 @@ export async function startTournament(tournamentId: string) {
 
     const participantCount = participants.length
 
-    // Assign bracket positions (1 to participantCount)
+    // Shuffle participants randomly for fair pairing
+    const shuffledParticipants = shuffleArray(participants)
+    console.log(`🎲 Shuffled ${participantCount} participants randomly for pairing`)
+
+    // Assign bracket positions (1 to participantCount) to shuffled participants
     for (let i = 0; i < participantCount; i++) {
       const { error: updateError } = await supabase
         .from("tournament_participants")
         .update({ bracket_position: i + 1, status: "active" })
-        .eq("id", participants[i].id)
+        .eq("id", shuffledParticipants[i].id)
 
       if (updateError) {
         console.error(`Error updating participant ${i + 1}:`, updateError)
@@ -376,7 +390,7 @@ export async function startTournament(tournamentId: string) {
       .eq("tournament_id", tournamentId)
       .order("bracket_position", { ascending: true })
 
-    const finalParticipants = updatedParticipants || participants
+    const finalParticipants = updatedParticipants || shuffledParticipants
 
     // Generate first round matches
     const matchesPerRound = Math.floor(participantCount / 2)
@@ -849,13 +863,14 @@ export async function advanceTournamentRound(tournamentId: string) {
     const matchesPerRound = Math.floor(winners.length / 2)
     const byes = winners.length % 2
 
-    // Sort winners by bracket position
-    winners.sort((a, b) => a.bracketPosition - b.bracketPosition)
+    // Shuffle winners randomly for fair pairing in next round
+    const shuffledWinners = shuffleArray(winners)
+    console.log(`🎲 Shuffled ${winners.length} winners randomly for round ${nextRound} pairing`)
 
     // Create matches for next round
     for (let i = 0; i < matchesPerRound; i++) {
-      const player1 = winners[i * 2]
-      const player2 = winners[i * 2 + 1]
+      const player1 = shuffledWinners[i * 2]
+      const player2 = shuffledWinners[i * 2 + 1]
 
       // Get participant records
       const { data: p1 } = await supabase
@@ -908,7 +923,7 @@ export async function advanceTournamentRound(tournamentId: string) {
 
     // Handle byes
     if (byes === 1) {
-      const byePlayer = winners[winners.length - 1]
+      const byePlayer = shuffledWinners[shuffledWinners.length - 1]
       const { data: byeMatch, error: byeMatchError } = await supabase
         .from("matches")
         .insert({

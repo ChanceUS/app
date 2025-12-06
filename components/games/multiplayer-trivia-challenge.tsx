@@ -376,12 +376,17 @@ export default function MultiplayerTriviaChallenge({
         const hasQuestions = hasGameState && hasGameState.questions && hasGameState.questions.length > 0
         const needsInitialization = !gameState || (hasGameState && !hasQuestions)
         
+        // Check if this is a rematch (has category in game_data but no gameState yet)
+        const isRematch = matchData?.game_data?.category !== undefined && !hasGameState
+        
         console.log('🔍 Initialization check:', {
           hasGameState: !!hasGameState,
           hasQuestions,
           needsInitialization,
           isInitializing: isInitializingRef.current,
-          hasLocalGameState: !!gameState
+          hasLocalGameState: !!gameState,
+          isRematch,
+          categoryFromMatch: matchData?.game_data?.category
         })
         
         if (needsInitialization && !isInitializingRef.current) {
@@ -389,23 +394,26 @@ export default function MultiplayerTriviaChallenge({
           // Get category from match data directly (more reliable than state)
           const categoryFromMatch = matchData?.game_data?.category || selectedCategory
           
-          // For rematches, allow initialization without category (will use all categories)
-          // Only wait for category if this is a brand new match (no gameState at all)
-          if (!categoryFromMatch && !categorySelected && !hasGameState) {
+          // For rematches, always allow initialization (category is already set, or will use all categories)
+          // Only wait for category if this is a brand new match (no gameState AND no category in game_data)
+          if (!categoryFromMatch && !categorySelected && !hasGameState && !isRematch) {
             console.log('⏳ Waiting for category selection...')
             return
           }
+          
+          // For rematches, use the category from game_data even if it's null/undefined
+          const categoryToUse = isRematch ? (matchData?.game_data?.category || null) : categoryFromMatch
           
           // Prevent multiple simultaneous initializations
           isInitializingRef.current = true
           
           // Initialize new game using helper function (similar to Math Blitz pattern)
           // Use synchronous generation like Math Blitz - no async database calls
-          console.log(`🎯 Initializing trivia game for category: ${categoryFromMatch || 'All Categories'}`)
+          console.log(`🎯 Initializing trivia game for category: ${categoryToUse || 'All Categories'} (isRematch: ${isRematch})`)
           
           try {
             const { generateSynchronizedTriviaQuestionsSync } = await import('@/lib/game-logic')
-            const questions = generateSynchronizedTriviaQuestionsSync(matchId, categoryFromMatch, TOTAL_QUESTIONS)
+            const questions = generateSynchronizedTriviaQuestionsSync(matchId, categoryToUse, TOTAL_QUESTIONS)
             
             const initialState: MultiplayerTriviaState = {
               questions,
@@ -439,19 +447,22 @@ export default function MultiplayerTriviaChallenge({
             })
             
             // Also save category to match data if we have it (non-blocking)
-            if (categoryFromMatch) {
+            // For rematches, ensure category is saved even if it was null
+            if (categoryToUse !== undefined) {
               supabase
                 .from('matches')
                 .update({
                   game_data: {
                     ...matchData?.game_data,
-                    category: categoryFromMatch
+                    category: categoryToUse
                   }
                 })
                 .eq('id', matchId)
                 .then(({ error }) => {
                   if (error) {
                     console.error('Error saving category:', error)
+                  } else {
+                    console.log('✅ Category saved to match data:', categoryToUse)
                   }
                 })
             }

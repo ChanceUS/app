@@ -628,7 +628,69 @@ export const triviaQuestions: TriviaQuestion[] = [
     category: "Animals",
   },
   
-  // Classic Questions (for backward compatibility)
+  // Sports Questions
+  {
+    question: "How many players are on a basketball team on the court at one time?",
+    options: ["4", "5", "6", "7"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  {
+    question: "Which sport is played at Wimbledon?",
+    options: ["Golf", "Tennis", "Cricket", "Rugby"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  {
+    question: "What is the maximum number of players on a soccer team on the field at once?",
+    options: ["10", "11", "12", "13"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  {
+    question: "In which sport would you perform a slam dunk?",
+    options: ["Volleyball", "Basketball", "Tennis", "Baseball"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  {
+    question: "How many innings are in a standard baseball game?",
+    options: ["7", "8", "9", "10"],
+    correctAnswer: 2,
+    category: "Sports",
+  },
+  {
+    question: "Which country won the FIFA World Cup in 2022?",
+    options: ["France", "Brazil", "Argentina", "Germany"],
+    correctAnswer: 2,
+    category: "Sports",
+  },
+  {
+    question: "What is the name of the trophy awarded to the winner of the Super Bowl?",
+    options: ["Lombardi Trophy", "Stanley Cup", "Larry O'Brien Trophy", "Vince Lombardi Trophy"],
+    correctAnswer: 3,
+    category: "Sports",
+  },
+  {
+    question: "In tennis, what is a score of zero called?",
+    options: ["Nil", "Zero", "Love", "Nothing"],
+    correctAnswer: 2,
+    category: "Sports",
+  },
+  {
+    question: "Which sport uses a puck?",
+    options: ["Soccer", "Hockey", "Basketball", "Baseball"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  {
+    question: "How many points is a touchdown worth in American football?",
+    options: ["5", "6", "7", "8"],
+    correctAnswer: 1,
+    category: "Sports",
+  },
+  
+  // Classic Questions (for backward compatibility - kept for existing matches)
   {
     question: "What is the capital of France?",
     options: ["London", "Berlin", "Paris", "Madrid"],
@@ -819,6 +881,12 @@ export function generateSynchronizedTriviaQuestionsSync(
     }
   }
   
+  // Create a seeded random function for this match
+  const seededRandom = () => {
+    seedNum = (seedNum * 9301 + 49297) % 233280
+    return seedNum / 233280.0
+  }
+  
   // Generate questions using seeded selection (deterministic based on matchId)
   for (let i = 0; i < count; i++) {
     // Use seed + index to generate consistent question selection
@@ -828,13 +896,41 @@ export function generateSynchronizedTriviaQuestionsSync(
     
     const q = availableQuestions[index]
     
+    // Shuffle options using seeded random (so both players see same order)
+    const originalCorrectIndex = q.correctAnswer
+    const correctAnswerText = q.options[originalCorrectIndex]
+    
+    // Shuffle the options array
+    const shuffledOptions = shuffleSeededArray([...q.options], seededRandom)
+    
+    // Find the new position of the correct answer after shuffling
+    const newCorrectIndex = shuffledOptions.indexOf(correctAnswerText)
+    
     // Check for duplicates (shouldn't happen with good seed, but just in case)
     if (questions.some(existing => existing.question === q.question)) {
       // If duplicate, use next question
       const nextIndex = (index + 1) % availableQuestions.length
-      questions.push({ ...availableQuestions[nextIndex], timeLimit: 45 })
+      const nextQ = availableQuestions[nextIndex]
+      
+      // Shuffle next question's options too
+      const nextOriginalCorrectIndex = nextQ.correctAnswer
+      const nextCorrectAnswerText = nextQ.options[nextOriginalCorrectIndex]
+      const nextShuffledOptions = shuffleSeededArray([...nextQ.options], seededRandom)
+      const nextNewCorrectIndex = nextShuffledOptions.indexOf(nextCorrectAnswerText)
+      
+      questions.push({ 
+        ...nextQ, 
+        options: nextShuffledOptions,
+        correctAnswer: nextNewCorrectIndex,
+        timeLimit: 45 
+      })
     } else {
-      questions.push({ ...q, timeLimit: 45 })
+      questions.push({ 
+        ...q, 
+        options: shuffledOptions,
+        correctAnswer: newCorrectIndex,
+        timeLimit: 45 
+      })
     }
   }
   
