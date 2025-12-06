@@ -14,7 +14,8 @@ import {
   TriviaAnswer,
   MultiplayerTriviaState,
   TriviaResult,
-  getRandomTriviaQuestionFromDB
+  getRandomTriviaQuestionFromDB,
+  getRandomTriviaQuestion
 } from "@/lib/game-logic"
 
 interface MultiplayerTriviaChallengeProps {
@@ -300,43 +301,81 @@ export default function MultiplayerTriviaChallenge({
           console.log(`🎯 Loading questions for category: ${categoryFromMatch || 'All Categories'}`)
           
           for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-            let q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
+            let q: TriviaQuestion | null = null
             let attempts = 0
-            // Prevent duplicate questions - check both by question text and ID if available
-            while (q && (usedQuestionIds.has(q.question) || questions.some(existing => existing.question === q.question)) && attempts < 20) {
-              q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
-              attempts++
-            }
+            const maxAttempts = 10
             
-            if (q) {
-              // Verify the question matches the selected category
-              if (categoryFromMatch && q.category !== categoryFromMatch) {
-                console.warn(`Question category mismatch: expected ${categoryFromMatch}, got ${q.category}, retrying...`)
-                // Retry with category filter
-                q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch)
-                attempts++
-                if (q && q.category !== categoryFromMatch) {
-                  console.error(`Failed to get question for category ${categoryFromMatch}, skipping`)
-                  continue
+            // Try to get a question from database that matches category and isn't a duplicate
+            while (attempts < maxAttempts) {
+              q = await getRandomTriviaQuestionFromDB(undefined, categoryFromMatch || undefined)
+              
+              // Check if we got a valid question that's not a duplicate
+              if (q && !usedQuestionIds.has(q.question) && !questions.some(existing => existing.question === q!.question)) {
+                // If category is specified, prefer matching category but don't require it
+                if (!categoryFromMatch || q.category === categoryFromMatch) {
+                  break // Found a good question
+                } else if (attempts >= 5) {
+                  // After 5 attempts, accept any question even if category doesn't match
+                  console.warn(`Using question from category ${q.category} as fallback for ${categoryFromMatch} after ${attempts} attempts`)
+                  break
                 }
               }
               
-              if (q) {
-                usedQuestionIds.add(q.question)
-                questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
+              attempts++
+              q = null // Reset for next attempt
+            }
+            
+            // If database failed, use local fallback
+            if (!q) {
+              const { getRandomTriviaQuestion, triviaQuestions } = await import('@/lib/game-logic')
+              
+              // Try to get a local question matching the category
+              if (categoryFromMatch) {
+                const filtered = triviaQuestions.filter(
+                  localQ => localQ.category === categoryFromMatch && 
+                  !usedQuestionIds.has(localQ.question) &&
+                  !questions.some(existing => existing.question === localQ.question)
+                )
+                if (filtered.length > 0) {
+                  q = filtered[Math.floor(Math.random() * filtered.length)]
+                }
               }
+              
+              // If no category match, use any unused local question
+              if (!q) {
+                const unused = triviaQuestions.filter(
+                  localQ => !usedQuestionIds.has(localQ.question) &&
+                  !questions.some(existing => existing.question === localQ.question)
+                )
+                if (unused.length > 0) {
+                  q = unused[Math.floor(Math.random() * unused.length)]
+                } else {
+                  // Last resort: use any question (even if duplicate)
+                  q = getRandomTriviaQuestion()
+                }
+              }
+            }
+            
+            // Always add a question - never skip
+            if (q) {
+              usedQuestionIds.add(q.question)
+              questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
             } else {
-              // If question failed to load, skip it
-              console.warn(`Failed to load question ${i + 1}, skipping`)
+              // Absolute last resort: create a placeholder question
+              console.error(`CRITICAL: Could not load any question for index ${i + 1}`)
+              const { getRandomTriviaQuestion } = await import('@/lib/game-logic')
+              const emergencyQ = getRandomTriviaQuestion()
+              usedQuestionIds.add(emergencyQ.question)
+              questions.push({ ...emergencyQ, timeLimit: QUESTION_TIME_LIMIT })
             }
           }
           
-          // If we have no questions at all, fall back to generating 8 random questions
+          // If we have no questions at all, fall back to generating random questions
           if (questions.length === 0) {
             console.error('Failed to load any questions, using fallback')
             // Generate fallback questions
             for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-              const { getRandomTriviaQuestion } = await import('@/lib/game-logic')
+              const { getRandomTriviaQuestion, triviaQuestions } = await import('@/lib/game-logic')
               const q = getRandomTriviaQuestion()
               questions.push({ ...q, timeLimit: QUESTION_TIME_LIMIT })
             }

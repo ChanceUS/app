@@ -703,12 +703,27 @@ export async function getRandomTriviaQuestionFromDB(difficulty?: 'easy' | 'mediu
 
     if (error) {
       console.error('Error fetching trivia question:', error)
-      // Fallback to local questions
+      // Fallback to local questions - try to match category if possible
+      if (category) {
+        const filteredQuestions = triviaQuestions.filter(q => q.category === category)
+        if (filteredQuestions.length > 0) {
+          return filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)]
+        }
+      }
+      // If no category match or no category specified, return any question
       return getRandomTriviaQuestion()
     }
 
     if (!data || data.length === 0) {
-      console.warn('No trivia questions found, falling back to legacy questions')
+      console.warn('No trivia questions found in database, falling back to legacy questions')
+      // Try to match category if possible
+      if (category) {
+        const filteredQuestions = triviaQuestions.filter(q => q.category === category)
+        if (filteredQuestions.length > 0) {
+          return filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)]
+        }
+      }
+      // If no category match or no category specified, return any question
       return getRandomTriviaQuestion()
     }
 
