@@ -290,3 +290,162 @@ export async function cancelMatch(matchId: string) {
     throw error
   }
 }
+
+// Create a rematch and deduct tokens atomically
+export async function createRematchWithDeduction(
+  originalMatchId: string,
+  gameId: string,
+  player1Id: string,
+  player2Id: string,
+  betAmount: number
+) {
+  const cookieStore = await cookies()
+  const supabase = createServerActionClient({ cookies: () => cookieStore })
+
+  try {
+    console.log('🔄 Creating rematch with token deduction:', {
+      originalMatchId,
+      gameId,
+      player1Id,
+      player2Id,
+      betAmount
+    })
+
+    // Verify both players have sufficient tokens
+    const { data: player1Data, error: player1Error } = await supabase
+      .from('users')
+      .select('tokens')
+      .eq('id', player1Id)
+      .single()
+
+    const { data: player2Data, error: player2Error } = await supabase
+      .from('users')
+      .select('tokens')
+      .eq('id', player2Id)
+      .single()
+
+    if (player1Error || player2Error) {
+      console.error('❌ Error fetching player tokens:', { player1Error, player2Error })
+      return { success: false, error: 'Failed to fetch player token balances' }
+    }
+
+    if (!player1Data || player1Data.tokens < betAmount) {
+      return { success: false, error: 'Player 1 has insufficient tokens' }
+    }
+
+    if (!player2Data || player2Data.tokens < betAmount) {
+      return { success: false, error: 'Player 2 has insufficient tokens' }
+    }
+
+    // Create the new match
+    const { data: newMatch, error: matchError } = await supabase
+      .from('matches')
+      .insert({
+        game_id: gameId,
+        player1_id: player1Id,
+        player2_id: player2Id,
+        bet_amount: betAmount,
+        status: 'in_progress',
+        started_at: new Date().toISOString(),
+        game_data: {
+          board: Array(42).fill(null),
+          currentPlayer: 'player1',
+          winner: null
+        }
+      })
+      .select()
+      .single()
+
+    if (matchError || !newMatch) {
+      console.error('❌ Error creating rematch match:', matchError)
+      return { success: false, error: `Failed to create rematch: ${matchError?.message || 'Unknown error'}` }
+    }
+
+    console.log('✅ Rematch match created:', newMatch.id)
+
+    // Check if tokens were already deducted (prevent duplicate deductions)
+    const { data: existingTransactions } = await supabase
+      .from('transactions')
+      .select('id, user_id')
+      .eq('match_id', newMatch.id)
+      .eq('type', 'bet')
+      .in('user_id', [player1Id, player2Id])
+
+    if (existingTransactions && existingTransactions.length >= 2) {
+      console.log('⚠️ Tokens already deducted for this match, skipping duplicate deduction')
+      return { success: true, matchId: newMatch.id, alreadyDeducted: true }
+    }
+
+    // Deduct from player1
+    const { error: player1UpdateError } = await supabase
+      .from('users')
+      .update({ tokens: player1Data.tokens - betAmount })
+      .eq('id', player1Id)
+
+    if (player1UpdateError) {
+      console.error('❌ Error deducting tokens from player1:', player1UpdateError)
+      // Try to delete the match if token deduction fails
+      await supabase.from('matches').delete().eq('id', newMatch.id)
+      return { success: false, error: 'Failed to deduct tokens from player 1' }
+    }
+
+    // Deduct from player2
+    const { error: player2UpdateError } = await supabase
+      .from('users')
+      .update({ tokens: player2Data.tokens - betAmount })
+      .eq('id', player2Id)
+
+    if (player2UpdateError) {
+      console.error('❌ Error deducting tokens from player2:', player2UpdateError)
+      // Try to refund player1 if player2 deduction fails
+      await supabase
+        .from('users')
+        .update({ tokens: player1Data.tokens })
+        .eq('id', player1Id)
+      // Try to delete the match if token deduction fails
+      await supabase.from('matches').delete().eq('id', newMatch.id)
+      return { success: false, error: 'Failed to deduct tokens from player 2' }
+    }
+
+    // Create transaction records (database trigger will update balances)
+    const { error: transaction1Error } = await supabase.from('transactions').insert({
+      user_id: player1Id,
+      match_id: newMatch.id,
+      amount: -betAmount,
+      type: 'bet',
+      description: `Rematch bet - ${betAmount} tokens`
+    })
+
+    const { error: transaction2Error } = await supabase.from('transactions').insert({
+      user_id: player2Id,
+      match_id: newMatch.id,
+      amount: -betAmount,
+      type: 'bet',
+      description: `Rematch bet - ${betAmount} tokens`
+    })
+
+    if (transaction1Error || transaction2Error) {
+      console.error('❌ Error creating transaction records:', { transaction1Error, transaction2Error })
+      // Don't fail - tokens are already deducted
+    }
+
+    console.log('✅ Rematch created and tokens deducted successfully:', {
+      matchId: newMatch.id,
+      player1: { previous: player1Data.tokens, new: player1Data.tokens - betAmount },
+      player2: { previous: player2Data.tokens, new: player2Data.tokens - betAmount }
+    })
+
+    revalidatePath('/games')
+    revalidatePath('/matches')
+
+    return {
+      success: true,
+      matchId: newMatch.id,
+      player1Balance: player1Data.tokens - betAmount,
+      player2Balance: player2Data.tokens - betAmount
+    }
+  } catch (error: any) {
+    console.error('❌ Unexpected error creating rematch with deduction:', error)
+    return { success: false, error: error?.message || 'An unexpected error occurred' }
+  }
+}

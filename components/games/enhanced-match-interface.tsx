@@ -1622,8 +1622,8 @@ export default function EnhancedMatchInterface({
           </div>
         </div>
         
-        {/* Friend Button - Directly below player names */}
-        {opponentId && localMatch.player2_id && (
+        {/* Friend Button - Only show after match is completed */}
+        {opponentId && localMatch.player2_id && (localMatch.status === 'completed' || gameState.status === 'completed') && (
           <div className="mt-2 flex items-center justify-center">
             <Button
               onClick={handleAddFriend}

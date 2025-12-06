@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { sendFriendRequest, getFriends, getSentRequests, getPendingRequests, acceptFriendRequest } from "@/lib/friends-actions"
 import { completeMatch } from "@/lib/complete-match-action"
-import { deductMatchTokens } from "@/lib/deduct-match-tokens"
+import { createRematchWithDeduction } from "@/lib/game-actions"
 import { UserPlus, CheckCircle, Clock } from "lucide-react"
 
 interface SimpleConnectFourProps {
@@ -1092,103 +1092,47 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
         }
       }
       
-      // Create new match with same players and bet amount - AUTO START
-      const { data: newMatch, error: matchError } = await supabase
-        .from('matches')
-        .insert({
-          game_id: '69bf26d2-110b-40d9-b20a-d5cfab14d133', // Actual Four in a Row game ID
-          player1_id: player1Id,
-          player2_id: player2Id,
-          bet_amount: betAmount,
-          status: 'in_progress', // Auto-start the rematch
-          started_at: new Date().toISOString(),
-          game_data: {
-            board: Array(42).fill(null),
-            currentPlayer: 'player1',
-            winner: null
-          }
-        })
-        .select()
-        .single()
+      // Use server action to create rematch and deduct tokens atomically
+      const gameId = '69bf26d2-110b-40d9-b20a-d5cfab14d133' // Actual Four in a Row game ID
       
-      if (matchError) {
-        console.error('❌ Error creating rematch:', matchError)
-        console.error('❌ Match creation failed with details:', {
-          error: matchError,
-          game_id: '69bf26d2-110b-40d9-b20a-d5cfab14d133',
-          player1_id: player1Id,
-          player2_id: player2Id,
-          bet_amount: betAmount
-        })
-        alert(`Failed to create rematch: ${matchError.message}`)
-        setIsLoadingRematch(false)
-        return
-      }
-      
-      // CRITICAL: Deduct tokens from both players BEFORE redirecting
-      // This MUST complete successfully - if it fails, we should not proceed
-      if (betAmount > 0 && newMatch && newMatch.id) {
-        console.log('💰 CRITICAL: Deducting tokens for rematch via server action:', { 
-          betAmount, 
-          player1Id, 
-          player2Id, 
-          matchId: newMatch.id 
-        })
-        
-        try {
-          const deductionResult = await deductMatchTokens(newMatch.id, player1Id, player2Id, betAmount)
-          
-          console.log('💰 Deduction result:', JSON.stringify(deductionResult, null, 2))
-          
-          if (!deductionResult) {
-            console.error('❌ Deduction result is null/undefined')
-            alert('CRITICAL: Token deduction failed - result was null. Rematch created but tokens not deducted.')
-            // Still proceed with redirect, but user is warned
-          } else if (!deductionResult.success) {
-            console.error('❌ Failed to deduct tokens for rematch:', deductionResult.error)
-            alert(`CRITICAL: Failed to deduct tokens: ${deductionResult.error}. Rematch created but tokens not deducted.`)
-            // Still proceed with redirect, but user is warned
-          } else if (deductionResult.alreadyDeducted) {
-            console.log('ℹ️ Tokens were already deducted for this match - this is OK')
-          } else {
-            console.log('✅ Tokens deducted successfully for rematch:', {
-              player1Balance: deductionResult.player1Balance,
-              player2Balance: deductionResult.player2Balance
-            })
-          }
-        } catch (tokenError: any) {
-          console.error('❌ CRITICAL: Unexpected error deducting tokens for rematch:', tokenError)
-          console.error('❌ Error details:', {
-            message: tokenError?.message,
-            stack: tokenError?.stack,
-            error: tokenError
-          })
-          alert(`CRITICAL ERROR: Token deduction failed: ${tokenError?.message || tokenError}. Rematch created but tokens may not have been deducted.`)
-          // Still proceed with redirect, but user is warned
-        }
-      } else {
-        const skipReason = !betAmount ? 'betAmount is 0' : !newMatch ? 'newMatch is null' : !newMatch.id ? 'newMatch.id is missing' : 'unknown'
-        console.warn('⚠️ CRITICAL: Skipping token deduction:', { betAmount, hasMatch: !!newMatch, matchId: newMatch?.id, reason: skipReason })
-        if (betAmount > 0) {
-          alert(`WARNING: Token deduction was skipped (${skipReason}). Rematch created but tokens were NOT deducted.`)
-        }
-      }
-      
-      if (!newMatch || !newMatch.id) {
-        console.error('❌ Match creation returned no data')
-        alert('Failed to create rematch: No match data returned')
-        setIsLoadingRematch(false)
-        return
-      }
-      
-      console.log('✅ New match created successfully:', newMatch)
-      console.log('🔍 New match details:', {
-        id: newMatch.id,
-        game_id: newMatch.game_id,
-        status: newMatch.status,
-        player1_id: newMatch.player1_id,
-        player2_id: newMatch.player2_id
+      console.log('🔄 Creating rematch with token deduction via server action:', {
+        originalMatchId: matchId,
+        gameId,
+        player1Id,
+        player2Id,
+        betAmount
       })
+      
+      const rematchResult = await createRematchWithDeduction(
+        matchId,
+        gameId,
+        player1Id,
+        player2Id,
+        betAmount
+      )
+      
+      if (!rematchResult || !rematchResult.success) {
+        console.error('❌ Failed to create rematch with deduction:', rematchResult?.error)
+        alert(`Failed to create rematch: ${rematchResult?.error || 'Unknown error'}`)
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      if (!rematchResult.matchId) {
+        console.error('❌ Rematch created but no match ID returned')
+        alert('Failed to create rematch: No match ID returned')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      console.log('✅ Rematch created and tokens deducted successfully:', {
+        matchId: rematchResult.matchId,
+        player1Balance: rematchResult.player1Balance,
+        player2Balance: rematchResult.player2Balance,
+        alreadyDeducted: rematchResult.alreadyDeducted
+      })
+      
+      const newMatchId = rematchResult.matchId
       
       // Save rematch acceptance to match_history (non-blocking)
       supabase
@@ -1199,7 +1143,7 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           action_type: 'rematch_accepted',
           action_data: {
             accepted_by: currentUserId,
-            new_match_id: newMatch.id,
+            new_match_id: newMatchId,
             accepted_at: new Date().toISOString()
           }
         })
@@ -1212,10 +1156,9 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
       setRematchStatus('accepted')
       setIsLoadingRematch(false)
       
-      // The insert already returned the match, so it exists in the database
       // Use replace instead of push to avoid back button issues
-      console.log('🔄 Redirecting to new match:', `/games/match/${newMatch.id}`)
-      router.replace(`/games/match/${newMatch.id}`)
+      console.log('🔄 Redirecting to new match:', `/games/match/${newMatchId}`)
+      router.replace(`/games/match/${newMatchId}`)
     } catch (error) {
       console.error('Error accepting rematch:', error)
     } finally {
