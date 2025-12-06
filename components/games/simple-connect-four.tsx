@@ -1213,10 +1213,10 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                   <p>This match has been cancelled and is no longer playable.</p>
                 </div>
               ) : currentStatus === 'completed' ? (
-                <div className="text-blue-400 mb-6">
+                <div className="text-blue-400 mb-3 sm:mb-6">
                   {winner ? (
                     <div>
-                      <p className="text-xl font-bold">
+                      <p className="text-lg sm:text-xl font-bold">
                         {winner === 'draw' ? (
                           <span className="text-gray-400">It's a Draw!</span>
                         ) : winner === 'player1' ? (
@@ -1227,24 +1227,24 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           <span className="text-green-400">{playerNames.player1} Wins! 🎉</span>
                         )}
                       </p>
-                      <p>This match has finished.</p>
+                      <p className="text-sm sm:text-base">This match has finished.</p>
                       
                       {/* Show winnings if current user is the winner */}
                       {winner !== 'draw' && betAmount > 0 && (
-                        <div className="mt-4 p-4 bg-green-900/30 border border-green-500/50 rounded-lg">
+                        <div className="mt-2 sm:mt-4 p-2 sm:p-4 bg-green-900/30 border border-green-500/50 rounded-lg">
                           {((winner === 'player1' && currentUserId === player1Id) || 
                             (winner === 'player2' && currentUserId === player2Id)) ? (
                             <div className="text-center">
-                              <p className="text-green-400 font-semibold text-lg">
+                              <p className="text-green-400 font-semibold text-base sm:text-lg">
                                 🎊 You Won {betAmount * 2} Tokens! 🎊
                               </p>
-                              <p className="text-gray-300 text-sm mt-1">
+                              <p className="text-gray-300 text-xs sm:text-sm mt-1">
                                 Net Profit: +{betAmount} tokens (after your initial {betAmount} token bet)
                               </p>
                             </div>
                           ) : (
                             <div className="text-center">
-                              <p className="text-gray-400 text-sm">
+                              <p className="text-gray-400 text-xs sm:text-sm">
                                 Winner received {betAmount * 2} tokens
                               </p>
                             </div>
@@ -1255,52 +1255,52 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                       
                       {/* Rematch Request Section - Only show for non-tournament matches */}
                       {!isTournamentMatch && (
-                      <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+                      <div className="mt-3 sm:mt-6 bg-gray-800/50 rounded-lg p-3 sm:p-4">
+                        <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Rematch Request</h3>
                         
                         {rematchStatus === 'none' && (
                           <div className="text-center">
-                            <p className="text-gray-300 mb-4">Want to play again?</p>
+                            <p className="text-sm sm:text-base text-gray-300 mb-2 sm:mb-4">Want to play again?</p>
                             <button
                               onClick={requestRematch}
                               disabled={isLoadingRematch}
-                              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                              className="px-4 sm:px-6 py-1.5 sm:py-2 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                             >
                               {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
                             </button>
-                            <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                            <p className="text-gray-500 text-xs mt-1 sm:mt-2">Only one player can request a rematch</p>
                           </div>
                         )}
                         
                         {rematchStatus === 'requested' && (
                           <div className="text-center">
-                            <p className="text-blue-400 mb-4">✅ Rematch request sent to {currentUserId === player1Id ? playerNames.player2 : playerNames.player1}!</p>
-                            <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                            <p className="text-blue-400 mb-2 sm:mb-4 text-sm sm:text-base">✅ Rematch request sent to {currentUserId === player1Id ? playerNames.player2 : playerNames.player1}!</p>
+                            <p className="text-gray-400 text-xs sm:text-sm">Waiting for opponent to respond...</p>
                           </div>
                         )}
                         
                         {rematchStatus === 'accepted' && (
                           <div className="text-center">
-                            <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
-                            <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                            <p className="text-green-400 mb-2 sm:mb-4 text-sm sm:text-base">🎉 Rematch accepted! Creating new game...</p>
+                            <p className="text-gray-400 text-xs sm:text-sm">Redirecting to new match...</p>
                           </div>
                         )}
                         
                         {rematchStatus === 'received' && (
                           <div className="text-center">
-                            <p className="text-yellow-400 mb-4">🎮 {currentUserId === player1Id ? playerNames.player2 : playerNames.player1} wants a rematch!</p>
-                            <div className="flex gap-3 justify-center">
+                            <p className="text-yellow-400 mb-2 sm:mb-4 text-sm sm:text-base">🎮 {currentUserId === player1Id ? playerNames.player2 : playerNames.player1} wants a rematch!</p>
+                            <div className="flex gap-2 sm:gap-3 justify-center">
                               <button
                                 onClick={acceptRematch}
                                 disabled={isLoadingRematch}
-                                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                               >
                                 {isLoadingRematch ? 'Accepting...' : 'Accept'}
                               </button>
                               <button
                                 onClick={rejectRematch}
                                 disabled={isLoadingRematch}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                                className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                               >
                                 {isLoadingRematch ? 'Rejecting...' : 'Decline'}
                               </button>
@@ -1308,23 +1308,16 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
                           </div>
                         )}
                         
-                        {rematchStatus === 'accepted' && (
-                          <div className="text-center">
-                            <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
-                            <p className="text-gray-400 text-sm">Redirecting to new match...</p>
-                          </div>
-                        )}
-                        
                         {rematchStatus === 'rejected' && (
                           <div className="text-center">
-                            <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                            <p className="text-red-400 mb-2 sm:mb-4 text-sm sm:text-base">❌ Rematch declined by opponent</p>
                             <button
                               onClick={() => {
                                 setRematchStatus('none')
                                 setRematchRequested(false)
                                 setRematchRequestedBy(null)
                               }}
-                              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
                             >
                               Request Again
                             </button>

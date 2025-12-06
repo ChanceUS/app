@@ -1456,7 +1456,7 @@ export default function MultiplayerMathBlitz({
 
   if (showInstructions) {
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-orange-500 rounded-full">
@@ -1535,138 +1535,41 @@ export default function MultiplayerMathBlitz({
     const isDraw = gameResult.winner === 'draw'
 
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className={`p-3 rounded-full ${isWinner ? 'bg-yellow-500' : isDraw ? 'bg-gray-500' : 'bg-red-500'}`}>
-              {isWinner ? <Trophy className="h-8 w-8 text-black" /> : 
-               isDraw ? <CheckCircle className="h-8 w-8 text-black" /> : 
-               <XCircle className="h-8 w-8 text-black" />}
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
+        <CardHeader className="text-center pb-3 sm:pb-6">
+          <div className="flex items-center justify-center gap-3 mb-2 sm:mb-4">
+            <div className={`p-2 sm:p-3 rounded-full ${isWinner ? 'bg-yellow-500' : isDraw ? 'bg-gray-500' : 'bg-red-500'}`}>
+              {isWinner ? <Trophy className="h-5 w-5 sm:h-8 sm:w-8 text-black" /> : 
+               isDraw ? <CheckCircle className="h-5 w-5 sm:h-8 sm:w-8 text-black" /> : 
+               <XCircle className="h-5 w-5 sm:h-8 sm:w-8 text-black" />}
             </div>
+            <CardTitle className="text-xl sm:text-3xl font-bold text-white">
+              {isWinner ? 'You Won!' : isDraw ? "It's a Draw!" : 'You Lost!'}
+            </CardTitle>
           </div>
-          <CardTitle className="text-3xl font-bold text-white">
-            {isWinner ? 'You Won!' : isDraw ? "It's a Draw!" : 'You Lost!'}
-          </CardTitle>
-          <p className="text-gray-400">
+          <p className="text-sm sm:text-base text-gray-400">
             {isWinner ? 'Congratulations on your victory!' : 
              isDraw ? 'Both players performed equally well!' : 
              'Better luck next time!'}
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Results Comparison */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className={`p-6 rounded-lg ${isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
-              <h3 className="text-lg font-semibold text-white mb-4">Your Results</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Composite Score:</span>
-                  <span className="text-white font-bold text-xl">{myResult.compositeScore || myResult.score}</span>
-                </div>
-                {myResult.scoreBreakdown && (
-                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Base: {myResult.scoreBreakdown.baseScore}</span>
-                      <span className="text-green-400">+Acc: {myResult.scoreBreakdown.accuracyBonus}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-blue-400">+Speed: {myResult.scoreBreakdown.speedBonus}</span>
-                      <span className="text-purple-400">+Cons: {myResult.scoreBreakdown.consistencyBonus}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-yellow-400">+Complete: {myResult.scoreBreakdown.completionBonus}</span>
-                      <span className="text-white font-semibold">= {myResult.compositeScore}</span>
-                    </div>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Problems Solved:</span>
-                  <span className="text-green-400 font-semibold">{myResult.problemsSolved}/10</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Accuracy:</span>
-                  <span className="text-blue-400 font-semibold">{myResult.accuracy}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total Time:</span>
-                  <span className="text-purple-400 font-semibold">{myResult.totalTime}s</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Best Streak:</span>
-                  <span className="text-orange-400 font-semibold">{myResult.streak}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className={`p-6 rounded-lg ${!isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
-              <h3 className="text-lg font-semibold text-white mb-4">Opponent Results</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Composite Score:</span>
-                  <span className="text-white font-bold text-xl">{opponentResult.compositeScore || opponentResult.score}</span>
-                </div>
-                {opponentResult.scoreBreakdown && (
-                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Base: {opponentResult.scoreBreakdown.baseScore}</span>
-                      <span className="text-green-400">+Acc: {opponentResult.scoreBreakdown.accuracyBonus}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-blue-400">+Speed: {opponentResult.scoreBreakdown.speedBonus}</span>
-                      <span className="text-purple-400">+Cons: {opponentResult.scoreBreakdown.consistencyBonus}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-yellow-400">+Complete: {opponentResult.scoreBreakdown.completionBonus}</span>
-                      <span className="text-white font-semibold">= {opponentResult.compositeScore}</span>
-                    </div>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Problems Solved:</span>
-                  <span className="text-green-400 font-semibold">{opponentResult.problemsSolved}/10</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Accuracy:</span>
-                  <span className="text-blue-400 font-semibold">{opponentResult.accuracy}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Total Time:</span>
-                  <span className="text-purple-400 font-semibold">{opponentResult.totalTime}s</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Best Streak:</span>
-                  <span className="text-orange-400 font-semibold">{opponentResult.streak}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Win Reason */}
-          <Alert className="bg-gray-800/50 border-gray-700">
-            <Trophy className="h-4 w-4" />
-            <AlertDescription className="text-gray-300">
-              Winner determined by: <span className="text-white font-semibold capitalize">
-                {gameResult.winReason === 'composite' ? 'Overall Performance' : gameResult.winReason}
-              </span>
-            </AlertDescription>
-          </Alert>
-          
+        <CardContent className="space-y-3 sm:space-y-6">
           {/* Rematch Request Section - Only show for non-tournament matches */}
           {!isTournamentMatch && (
-            <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
-              <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Rematch Request</h3>
               
               {rematchStatus === 'none' && (
                 <div className="text-center">
-                  <p className="text-gray-300 mb-4">Want to play again?</p>
+                  <p className="text-sm sm:text-base text-gray-300 mb-2 sm:mb-4">Want to play again?</p>
                   <button
                     onClick={requestRematch}
                     disabled={isLoadingRematch}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                   >
                     {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
                   </button>
-                  <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                  <p className="text-gray-500 text-xs mt-1 sm:mt-2">Only one player can request a rematch</p>
                 </div>
               )}
               
@@ -1723,6 +1626,103 @@ export default function MultiplayerMathBlitz({
             </div>
           )}
           
+          {/* Results Comparison */}
+          <div className="grid md:grid-cols-2 gap-3 sm:gap-6">
+            <div className={`p-3 sm:p-6 rounded-lg ${isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
+              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Your Results</h3>
+              <div className="space-y-2 sm:space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Composite Score:</span>
+                  <span className="text-white font-bold text-lg sm:text-xl">{myResult.compositeScore || myResult.score}</span>
+                </div>
+                {myResult.scoreBreakdown && (
+                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Base: {myResult.scoreBreakdown.baseScore}</span>
+                      <span className="text-green-400">+Acc: {myResult.scoreBreakdown.accuracyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-400">+Speed: {myResult.scoreBreakdown.speedBonus}</span>
+                      <span className="text-purple-400">+Cons: {myResult.scoreBreakdown.consistencyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-400">+Complete: {myResult.scoreBreakdown.completionBonus}</span>
+                      <span className="text-white font-semibold">= {myResult.compositeScore}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Problems Solved:</span>
+                  <span className="text-green-400 font-semibold text-sm sm:text-base">{myResult.problemsSolved}/10</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Accuracy:</span>
+                  <span className="text-blue-400 font-semibold text-sm sm:text-base">{myResult.accuracy}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Total Time:</span>
+                  <span className="text-purple-400 font-semibold text-sm sm:text-base">{myResult.totalTime}s</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Best Streak:</span>
+                  <span className="text-orange-400 font-semibold text-sm sm:text-base">{myResult.streak}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-3 sm:p-6 rounded-lg ${!isPlayer1 && isWinner ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-gray-800/30'}`}>
+              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Opponent Results</h3>
+              <div className="space-y-2 sm:space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Composite Score:</span>
+                  <span className="text-white font-bold text-lg sm:text-xl">{opponentResult.compositeScore || opponentResult.score}</span>
+                </div>
+                {opponentResult.scoreBreakdown && (
+                  <div className="space-y-1 text-xs bg-gray-800/30 p-2 rounded">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Base: {opponentResult.scoreBreakdown.baseScore}</span>
+                      <span className="text-green-400">+Acc: {opponentResult.scoreBreakdown.accuracyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-400">+Speed: {opponentResult.scoreBreakdown.speedBonus}</span>
+                      <span className="text-purple-400">+Cons: {opponentResult.scoreBreakdown.consistencyBonus}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-yellow-400">+Complete: {opponentResult.scoreBreakdown.completionBonus}</span>
+                      <span className="text-white font-semibold">= {opponentResult.compositeScore}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Problems Solved:</span>
+                  <span className="text-green-400 font-semibold text-sm sm:text-base">{opponentResult.problemsSolved}/10</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Accuracy:</span>
+                  <span className="text-blue-400 font-semibold text-sm sm:text-base">{opponentResult.accuracy}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Total Time:</span>
+                  <span className="text-purple-400 font-semibold text-sm sm:text-base">{opponentResult.totalTime}s</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-gray-400">Best Streak:</span>
+                  <span className="text-orange-400 font-semibold text-sm sm:text-base">{opponentResult.streak}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Win Reason */}
+          <Alert className="bg-gray-800/50 border-gray-700">
+            <Trophy className="h-4 w-4" />
+            <AlertDescription className="text-gray-300">
+              Winner determined by: <span className="text-white font-semibold capitalize">
+                {gameResult.winReason === 'composite' ? 'Overall Performance' : gameResult.winReason}
+              </span>
+            </AlertDescription>
+          </Alert>
+          
         </CardContent>
       </Card>
     )
@@ -1731,7 +1731,7 @@ export default function MultiplayerMathBlitz({
   if (!gameState) {
     console.log('🔄 No game state, showing loading...')
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Loading game...</p>
@@ -1772,7 +1772,7 @@ export default function MultiplayerMathBlitz({
       const isDraw = result.winner === 'draw'
 
       return (
-        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
               <div className={`p-3 rounded-full ${isWinner ? 'bg-yellow-500' : isDraw ? 'bg-gray-500' : 'bg-red-500'}`}>
@@ -1847,7 +1847,7 @@ export default function MultiplayerMathBlitz({
       )
     } else {
       return (
-        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-white">Calculating Results...</CardTitle>
             <p className="text-gray-400">Please wait while we calculate the final scores.</p>
@@ -1889,7 +1889,7 @@ export default function MultiplayerMathBlitz({
         const isDraw = result.winner === 'draw'
 
         return (
-          <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
             <CardHeader className="text-center">
               <div className="text-6xl mb-4">🏆</div>
               <h2 className="text-3xl font-bold text-white mb-2">
@@ -2023,16 +2023,37 @@ export default function MultiplayerMathBlitz({
                         Request Again
                       </button>
                     </div>
-                  )}
+                )}
+              </div>
+            )}
+            
+            <div className="grid grid-cols-2 gap-6">
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 1</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player1Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player1Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player1Result.accuracy * 100)}% accuracy</p>
                 </div>
-              )}
-            </CardContent>
+              </div>
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 2</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player2Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player2Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player2Result.accuracy * 100)}% accuracy</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
           </Card>
         )
       } else {
         console.log('⚠️ No game result available in past last question check')
         return (
-          <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+          <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
             <CardContent className="text-center py-12">
               <div className="text-6xl mb-4">🏆</div>
               <h2 className="text-2xl font-bold text-white mb-4">Game Complete!</h2>
@@ -2064,7 +2085,7 @@ export default function MultiplayerMathBlitz({
         totalProblems: gameState.problems.length
       })
       return (
-        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
           <CardContent className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
             <p className="text-gray-400">Waiting for your opponent to finish...</p>
@@ -2097,7 +2118,7 @@ export default function MultiplayerMathBlitz({
       bothPlayersReady 
     })
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Waiting for game to start...</p>
@@ -2159,32 +2180,12 @@ export default function MultiplayerMathBlitz({
     // Show results screen
     if (gameResult) {
       return (
-        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold text-white">Game Complete!</CardTitle>
             <p className="text-gray-400">Final Results</p>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="text-center p-4 bg-gray-800 rounded-lg">
-                <h3 className="text-xl font-bold text-white mb-2">Player 1</h3>
-                <p className="text-3xl font-bold text-orange-500">{gameResult.player1Result.score}</p>
-                <p className="text-sm text-gray-400">points</p>
-                <div className="text-xs text-gray-500 mt-2">
-                  <p>{gameResult.player1Result.problemsSolved}/10 problems</p>
-                  <p>{Math.round(gameResult.player1Result.accuracy * 100)}% accuracy</p>
-                </div>
-              </div>
-              <div className="text-center p-4 bg-gray-800 rounded-lg">
-                <h3 className="text-xl font-bold text-white mb-2">Player 2</h3>
-                <p className="text-3xl font-bold text-orange-500">{gameResult.player2Result.score}</p>
-                <p className="text-sm text-gray-400">points</p>
-                <div className="text-xs text-gray-500 mt-2">
-                  <p>{gameResult.player2Result.problemsSolved}/10 problems</p>
-                  <p>{Math.round(gameResult.player2Result.accuracy * 100)}% accuracy</p>
-                </div>
-              </div>
-            </div>
             <div className="text-center">
               <h2 className="text-2xl font-bold text-white mb-2">
                 {gameResult.winner === 'player1' ? 'Player 1 Wins!' : 
@@ -2194,7 +2195,7 @@ export default function MultiplayerMathBlitz({
             
             {/* Rematch Request Section - Only show for non-tournament matches */}
             {!isTournamentMatch && (
-              <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
+              <div className="bg-gray-800/50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
                 
                 {rematchStatus === 'none' && (
@@ -2264,12 +2265,32 @@ export default function MultiplayerMathBlitz({
               </div>
             )}
             
+            <div className="grid grid-cols-2 gap-6">
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 1</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player1Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player1Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player1Result.accuracy * 100)}% accuracy</p>
+                </div>
+              </div>
+              <div className="text-center p-4 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-bold text-white mb-2">Player 2</h3>
+                <p className="text-3xl font-bold text-orange-500">{gameResult.player2Result.score}</p>
+                <p className="text-sm text-gray-400">points</p>
+                <div className="text-xs text-gray-500 mt-2">
+                  <p>{gameResult.player2Result.problemsSolved}/10 problems</p>
+                  <p>{Math.round(gameResult.player2Result.accuracy * 100)}% accuracy</p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )
     } else {
       return (
-        <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+        <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-white">Calculating Results...</CardTitle>
             <p className="text-gray-400">Please wait while we calculate the final scores.</p>
@@ -2298,7 +2319,7 @@ export default function MultiplayerMathBlitz({
     })
     
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="text-center py-12">
           <div className="text-6xl mb-4">🎉</div>
           <p className="text-2xl font-bold text-green-400 mb-2">You've Finished!</p>
@@ -2331,7 +2352,7 @@ export default function MultiplayerMathBlitz({
     
     console.log('🎯 Showing main game screen')
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardHeader className="text-center">
           {/* Game Progress */}
           <div className="flex justify-between items-center mb-4">

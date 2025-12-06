@@ -728,7 +728,7 @@ export default function MultiplayerTriviaChallenge({
   // Show loading
   if (!gameState) {
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="py-12 text-center">
           <div className="inline-block animate-spin">
             <Brain className="h-8 w-8 text-orange-500" />
@@ -916,32 +916,32 @@ export default function MultiplayerTriviaChallenge({
     const iWon = gameResult.winner === (isPlayer1 ? 'player1' : 'player2')
     
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
-        <CardHeader>
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
+        <CardHeader className="pb-3 sm:pb-6">
           <CardTitle className="text-center text-white flex items-center justify-center gap-2">
-            <Trophy className="h-6 w-6 text-yellow-400" />
-            Game Complete!
+            <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-400" />
+            <span className="text-xl sm:text-2xl">Game Complete!</span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-3 sm:space-y-6">
           <div className="text-center">
-            <p className="text-3xl font-bold text-white mb-2">
+            <p className="text-xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">
               {iWon ? 'You Won! 🎉' : gameResult.winner === 'draw' ? "It's a Draw!" : 'You Lost'}
             </p>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-800">
-              <div className="text-cyan-400 font-semibold mb-2">Your Score</div>
-              <div className="text-white text-3xl font-bold">{myResult.score}</div>
-              <div className="text-gray-400 text-sm mt-2">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4">
+            <div className="bg-gray-900/50 p-2 sm:p-4 rounded-lg border border-gray-800">
+              <div className="text-cyan-400 font-semibold mb-1 sm:mb-2 text-sm sm:text-base">Your Score</div>
+              <div className="text-white text-xl sm:text-3xl font-bold">{myResult.score}</div>
+              <div className="text-gray-400 text-xs sm:text-sm mt-1 sm:mt-2">
                 {myResult.correctAnswers}/{myResult.questionsAnswered} correct ({Math.round(myResult.accuracy)}%)
               </div>
             </div>
-            <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-800">
-              <div className="text-yellow-400 font-semibold mb-2">Opponent Score</div>
-              <div className="text-white text-3xl font-bold">{opponentResult.score}</div>
-              <div className="text-gray-400 text-sm mt-2">
+            <div className="bg-gray-900/50 p-2 sm:p-4 rounded-lg border border-gray-800">
+              <div className="text-yellow-400 font-semibold mb-1 sm:mb-2 text-sm sm:text-base">Opponent Score</div>
+              <div className="text-white text-xl sm:text-3xl font-bold">{opponentResult.score}</div>
+              <div className="text-gray-400 text-xs sm:text-sm mt-1 sm:mt-2">
                 {opponentResult.correctAnswers}/{opponentResult.questionsAnswered} correct ({Math.round(opponentResult.accuracy)}%)
               </div>
             </div>
@@ -949,52 +949,52 @@ export default function MultiplayerTriviaChallenge({
           
           {/* Rematch Request Section - Only show for non-tournament matches */}
           {!isTournamentMatch && (
-            <div className="mt-6 bg-gray-800/50 rounded-lg p-4">
-              <h3 className="text-lg font-semibold text-white mb-4">Rematch Request</h3>
+            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4">
+              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Rematch Request</h3>
               
               {rematchStatus === 'none' && (
                 <div className="text-center">
-                  <p className="text-gray-300 mb-4">Want to play again?</p>
+                  <p className="text-sm sm:text-base text-gray-300 mb-2 sm:mb-4">Want to play again?</p>
                   <button
                     onClick={requestRematch}
                     disabled={isLoadingRematch}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                   >
                     {isLoadingRematch ? 'Requesting...' : 'Request Rematch'}
                   </button>
-                  <p className="text-gray-500 text-xs mt-2">Only one player can request a rematch</p>
+                  <p className="text-gray-500 text-xs mt-1 sm:mt-2">Only one player can request a rematch</p>
                 </div>
               )}
               
               {rematchStatus === 'requested' && (
                 <div className="text-center">
-                  <p className="text-blue-400 mb-4">✅ Rematch request sent!</p>
-                  <p className="text-gray-400 text-sm">Waiting for opponent to respond...</p>
+                  <p className="text-blue-400 mb-2 sm:mb-4 text-sm sm:text-base">✅ Rematch request sent!</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Waiting for opponent to respond...</p>
                 </div>
               )}
               
               {rematchStatus === 'accepted' && (
                 <div className="text-center">
-                  <p className="text-green-400 mb-4">🎉 Rematch accepted! Creating new game...</p>
-                  <p className="text-gray-400 text-sm">Redirecting to new match...</p>
+                  <p className="text-green-400 mb-2 sm:mb-4 text-sm sm:text-base">🎉 Rematch accepted! Creating new game...</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Redirecting to new match...</p>
                 </div>
               )}
               
               {rematchStatus === 'received' && (
                 <div className="text-center">
-                  <p className="text-yellow-400 mb-4">🎮 Opponent wants a rematch!</p>
-                  <div className="flex gap-3 justify-center">
+                  <p className="text-yellow-400 mb-2 sm:mb-4 text-sm sm:text-base">🎮 Opponent wants a rematch!</p>
+                  <div className="flex gap-2 sm:gap-3 justify-center">
                     <button
                       onClick={acceptRematch}
                       disabled={isLoadingRematch}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                     >
                       {isLoadingRematch ? 'Accepting...' : 'Accept'}
                     </button>
                     <button
                       onClick={rejectRematch}
                       disabled={isLoadingRematch}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                     >
                       {isLoadingRematch ? 'Rejecting...' : 'Decline'}
                     </button>
@@ -1004,13 +1004,13 @@ export default function MultiplayerTriviaChallenge({
               
               {rematchStatus === 'rejected' && (
                 <div className="text-center">
-                  <p className="text-red-400 mb-4">❌ Rematch declined by opponent</p>
+                  <p className="text-red-400 mb-2 sm:mb-4 text-sm sm:text-base">❌ Rematch declined by opponent</p>
                   <button
                     onClick={() => {
                       setRematchStatus('none')
                       setRematchRequestedBy(null)
                     }}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
                   >
                     Request Again
                   </button>
@@ -1035,7 +1035,7 @@ export default function MultiplayerTriviaChallenge({
   if (myFinished && !opponentFinished) {
     const opponentName = isPlayer1 ? 'Player 2' : 'Player 1'
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="py-12 text-center">
           <Trophy className="h-16 w-16 text-orange-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">You've Finished!</h2>
@@ -1056,7 +1056,7 @@ export default function MultiplayerTriviaChallenge({
   // Show main game
   if (!matchReady) {
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="py-12 text-center">
           <p className="text-gray-400">Waiting for game to start...</p>
           {selectedCategory && (
@@ -1073,7 +1073,7 @@ export default function MultiplayerTriviaChallenge({
     // If only this player finished, waiting screen should already be shown above
     // This is a fallback to prevent showing questions
     return (
-      <Card className="w-full max-w-4xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900/50 border-gray-800">
         <CardContent className="py-12 text-center">
           <Trophy className="h-16 w-16 text-orange-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">You've Finished!</h2>
