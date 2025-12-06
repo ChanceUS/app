@@ -311,6 +311,16 @@ export async function createRematchWithDeduction(
       betAmount
     })
 
+    // Get the original match to copy category (for trivia games)
+    const { data: originalMatch } = await supabase
+      .from('matches')
+      .select('game_data')
+      .eq('id', originalMatchId)
+      .single()
+    
+    const originalCategory = originalMatch?.game_data?.category
+    console.log('📋 Original match category for rematch:', originalCategory)
+
     // Verify both players have sufficient tokens
     const { data: player1Data, error: player1Error } = await supabase
       .from('users')
@@ -337,7 +347,26 @@ export async function createRematchWithDeduction(
       return { success: false, error: 'Player 2 has insufficient tokens' }
     }
 
-    // Create the new match
+    // Create the new match with appropriate game_data based on game type
+    // Connect 4 game ID: 69bf26d2-110b-40d9-b20a-d5cfab14d133
+    // Trivia game ID: e03ee060-b913-4795-9149-54660e2e2eac
+    const isConnectFour = gameId === '69bf26d2-110b-40d9-b20a-d5cfab14d133'
+    const isTrivia = gameId === 'e03ee060-b913-4795-9149-54660e2e2eac'
+    
+    const gameData = isConnectFour ? {
+      board: Array(42).fill(null),
+      currentPlayer: 'player1',
+      winner: null
+    } : isTrivia ? {
+      // Trivia will initialize its own gameState when the component loads
+      // Copy category from original match so rematch uses same category
+      ...(originalCategory ? { category: originalCategory } : {})
+    } : {} // For other games, let the component initialize game_data
+    
+    if (isTrivia) {
+      console.log('📋 Rematch game_data for trivia:', gameData, 'Category:', originalCategory)
+    }
+    
     const { data: newMatch, error: matchError } = await supabase
       .from('matches')
       .insert({
@@ -347,11 +376,7 @@ export async function createRematchWithDeduction(
         bet_amount: betAmount,
         status: 'in_progress',
         started_at: new Date().toISOString(),
-        game_data: {
-          board: Array(42).fill(null),
-          currentPlayer: 'player1',
-          winner: null
-        }
+        game_data: gameData
       })
       .select()
       .single()

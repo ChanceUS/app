@@ -276,7 +276,7 @@ export default function MultiplayerTriviaChallenge({
           
           // CRITICAL: Ensure questions are loaded - if missing, game won't work
           if (!loadedState.questions || loadedState.questions.length === 0) {
-            console.error('❌ Loaded game state has no questions! This will cause the game to break.')
+            console.warn('⚠️ Loaded game state has no questions - will initialize new questions')
             // If we already have local questions, keep them and just update answers/scores
             if (gameState && gameState.questions && gameState.questions.length > 0) {
               console.log('✅ We have local questions, keeping them and merging with DB state')
@@ -286,8 +286,8 @@ export default function MultiplayerTriviaChallenge({
               })
               return // Exit early - don't re-initialize
             }
-            // Don't use this state - let it fall through to generate new questions
-            return // Exit early - don't try to use invalid state
+            // Don't use this invalid state - let it fall through to initialize new questions
+            // Continue to initialization block below (don't return)
           } else {
             // Update state - always use the database state as source of truth
             // But preserve local state if it has more recent answers (to prevent race conditions)
@@ -369,13 +369,30 @@ export default function MultiplayerTriviaChallenge({
             setMatchReady(true)
             setBothPlayersReady(true)
           }
-        } else if (!gameState && !isInitializingRef.current) {
-          // Only initialize if we don't have any state yet AND we're not already initializing
+        }
+        
+        // Initialize if no gameState exists OR if gameState exists but has no questions (rematch case)
+        const hasGameState = matchData?.game_data?.gameState
+        const hasQuestions = hasGameState && hasGameState.questions && hasGameState.questions.length > 0
+        const needsInitialization = !gameState || (hasGameState && !hasQuestions)
+        
+        console.log('🔍 Initialization check:', {
+          hasGameState: !!hasGameState,
+          hasQuestions,
+          needsInitialization,
+          isInitializing: isInitializingRef.current,
+          hasLocalGameState: !!gameState
+        })
+        
+        if (needsInitialization && !isInitializingRef.current) {
+          // Only initialize if we don't have any state yet OR state has no questions AND we're not already initializing
           // Get category from match data directly (more reliable than state)
           const categoryFromMatch = matchData?.game_data?.category || selectedCategory
           
-          // If this is a new match and no category selected, wait for category selection
-          if (!categoryFromMatch && !categorySelected) {
+          // For rematches, allow initialization without category (will use all categories)
+          // Only wait for category if this is a brand new match (no gameState at all)
+          if (!categoryFromMatch && !categorySelected && !hasGameState) {
+            console.log('⏳ Waiting for category selection...')
             return
           }
           
@@ -410,34 +427,49 @@ export default function MultiplayerTriviaChallenge({
               console.error(`❌ CRITICAL: Expected ${TOTAL_QUESTIONS} questions but got ${initialState.questions.length}`)
             }
             
+            // Set state immediately so component doesn't show loading
             setGameState(initialState)
             setMyCurrentQuestionIndex(0)
+            setMatchReady(true)
+            setBothPlayersReady(true)
             
-            if (player1Id && player2Id) {
-              setMatchReady(true)
-              setBothPlayersReady(true)
-              
-              // Save initial state
-              await saveGameStateToDatabase(initialState)
-              // Also save category to match data if we have it
-              if (categoryFromMatch) {
-                await supabase
-                  .from('matches')
-                  .update({
-                    game_data: {
-                      ...matchData?.game_data,
-                      category: categoryFromMatch
-                    }
-                  })
-                  .eq('id', matchId)
-              }
+            // Save initial state (non-blocking - don't await)
+            saveGameStateToDatabase(initialState).catch(err => {
+              console.error('Error saving initial state:', err)
+            })
+            
+            // Also save category to match data if we have it (non-blocking)
+            if (categoryFromMatch) {
+              supabase
+                .from('matches')
+                .update({
+                  game_data: {
+                    ...matchData?.game_data,
+                    category: categoryFromMatch
+                  }
+                })
+                .eq('id', matchId)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error('Error saving category:', error)
+                  }
+                })
             }
-          } finally {
+          } catch (initError) {
+            console.error('❌ Error during initialization:', initError)
+            // Reset flag so it can retry
             isInitializingRef.current = false
+          } finally {
+            // Only reset if we didn't catch an error (error handler resets it)
+            if (isInitializingRef.current) {
+              isInitializingRef.current = false
+            }
           }
         }
       } catch (error) {
         console.error('Error loading game state:', error)
+        // Reset initialization flag on error so it can retry
+        isInitializingRef.current = false
       }
     }
     
@@ -890,32 +922,50 @@ export default function MultiplayerTriviaChallenge({
     
     setIsLoadingRematch(true)
     try {
-      const supabase = createClient()
+      // Use the same rematch function as Connect 4 (handles token deduction and match creation)
+      const { createRematchWithDeduction } = await import('@/lib/game-actions')
       
-      // Create new match with same players and bet amount
-      const { data: newMatch, error: matchError } = await supabase
-        .from('matches')
-        .insert({
-          game_id: gameId,
-          player1_id: player1Id,
-          player2_id: player2Id,
-          bet_amount: betAmount,
-          status: 'in_progress',
-          started_at: new Date().toISOString(),
-          game_data: {}
-        })
-        .select()
-        .single()
+      console.log('🔄 Creating trivia rematch with data:', {
+        currentUserId,
+        player1Id,
+        player2Id,
+        betAmount,
+        gameId
+      })
       
-      if (matchError || !newMatch) {
-        console.error('Error creating rematch:', matchError)
-        alert(`Failed to create rematch: ${matchError?.message || 'Unknown error'}`)
+      const rematchResult = await createRematchWithDeduction(
+        matchId,
+        gameId,
+        player1Id,
+        player2Id,
+        betAmount
+      )
+      
+      if (!rematchResult || !rematchResult.success) {
+        console.error('❌ Failed to create rematch with deduction:', rematchResult?.error)
+        alert(`Failed to create rematch: ${rematchResult?.error || 'Unknown error'}`)
         setIsLoadingRematch(false)
         return
       }
       
-      // Save rematch acceptance to match_history
-      await supabase
+      if (!rematchResult.matchId) {
+        console.error('❌ Rematch created but no match ID returned')
+        alert('Failed to create rematch: No match ID returned')
+        setIsLoadingRematch(false)
+        return
+      }
+      
+      console.log('✅ Rematch created and tokens deducted successfully:', {
+        matchId: rematchResult.matchId,
+        player1Balance: rematchResult.player1Balance,
+        player2Balance: rematchResult.player2Balance
+      })
+      
+      const newMatchId = rematchResult.matchId
+      
+      // Save rematch acceptance to match_history (non-blocking)
+      const supabase = createClient()
+      supabase
         .from('match_history')
         .insert({
           match_id: matchId,
@@ -923,15 +973,21 @@ export default function MultiplayerTriviaChallenge({
           action_type: 'rematch_accepted',
           action_data: {
             accepted_by: currentUserId,
-            new_match_id: newMatch.id,
+            new_match_id: newMatchId,
             accepted_at: new Date().toISOString()
+          }
+        })
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error saving rematch acceptance (non-critical):', error)
           }
         })
       
       setRematchStatus('accepted')
-      router.replace(`/games/match/${newMatch.id}`)
+      router.replace(`/games/match/${newMatchId}`)
     } catch (error) {
       console.error('Error accepting rematch:', error)
+      alert('Failed to create rematch. Please try again.')
     } finally {
       setIsLoadingRematch(false)
     }
@@ -985,27 +1041,10 @@ export default function MultiplayerTriviaChallenge({
             </p>
           </div>
           
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
-            <div className="bg-gray-900/50 p-2 sm:p-4 rounded-lg border border-gray-800">
-              <div className="text-cyan-400 font-semibold mb-1 sm:mb-2 text-sm sm:text-base">Your Score</div>
-              <div className="text-white text-xl sm:text-3xl font-bold">{myResult.score}</div>
-              <div className="text-gray-400 text-xs sm:text-sm mt-1 sm:mt-2">
-                {myResult.correctAnswers}/{myResult.questionsAnswered} correct ({Math.round(myResult.accuracy)}%)
-              </div>
-            </div>
-            <div className="bg-gray-900/50 p-2 sm:p-4 rounded-lg border border-gray-800">
-              <div className="text-yellow-400 font-semibold mb-1 sm:mb-2 text-sm sm:text-base">Opponent Score</div>
-              <div className="text-white text-xl sm:text-3xl font-bold">{opponentResult.score}</div>
-              <div className="text-gray-400 text-xs sm:text-sm mt-1 sm:mt-2">
-                {opponentResult.correctAnswers}/{opponentResult.questionsAnswered} correct ({Math.round(opponentResult.accuracy)}%)
-              </div>
-            </div>
-          </div>
-          
-          {/* Rematch Request Section - Only show for non-tournament matches */}
+          {/* Rematch Request Section - Only show for non-tournament matches - MOVED ABOVE SCORES */}
           {!isTournamentMatch && (
             <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4">
-              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4">Rematch Request</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-white mb-2 sm:mb-4 text-center">Rematch Request</h3>
               
               {rematchStatus === 'none' && (
                 <div className="text-center">
@@ -1073,6 +1112,24 @@ export default function MultiplayerTriviaChallenge({
               )}
             </div>
           )}
+          
+          {/* Scoreboard */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-4 sm:mb-6">
+            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-400 mb-1 sm:mb-2">Your Score</h3>
+              <p className="text-xl sm:text-2xl font-bold text-white">{myResult.score}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-1">
+                {myResult.correctAnswers}/{myResult.questionsAnswered} correct ({Math.round(myResult.accuracy)}%)
+              </p>
+            </div>
+            <div className="bg-gray-800/50 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-400 mb-1 sm:mb-2">Opponent Score</h3>
+              <p className="text-xl sm:text-2xl font-bold text-white">{opponentResult.score}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mt-1">
+                {opponentResult.correctAnswers}/{opponentResult.questionsAnswered} correct ({Math.round(opponentResult.accuracy)}%)
+              </p>
+            </div>
+          </div>
           
         </CardContent>
       </Card>
