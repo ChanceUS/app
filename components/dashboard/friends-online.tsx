@@ -304,52 +304,52 @@ export default function FriendsOnline() {
             )}
           </button>
         </div>
-
+        
         {/* Content */}
         <div className="max-h-96 overflow-y-auto">
           {activeTab === 'friends' && (
             <>
-              {friends.length === 0 ? (
-                <div className="px-3 py-4 text-center text-gray-400 text-sm">
-                  No friends found
-                </div>
-              ) : (
+        {friends.length === 0 ? (
+          <div className="px-3 py-4 text-center text-gray-400 text-sm">
+            No friends found
+          </div>
+        ) : (
                 <div>
-                  {friends.map((friend) => (
-                    <DropdownMenuItem 
-                      key={friend.id}
-                      className="flex items-center space-x-3 px-3 py-2 hover:bg-gray-800 cursor-pointer"
-                      onClick={() => {
-                        console.log('Clicked friend:', friend.display_name)
-                      }}
-                    >
-                      <div className="relative">
-                        <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-black font-bold text-sm">
-                          {friend.display_name.charAt(0).toUpperCase()}
-                        </div>
-                        <Circle 
-                          className={`absolute -bottom-1 -right-1 h-3 w-3 ${
-                            friend.is_online 
-                              ? 'text-green-500 fill-green-500' 
-                              : 'text-gray-500 fill-gray-500'
-                          }`} 
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {friend.display_name}
-                        </div>
-                        <div className="text-xs text-gray-400 truncate">
-                          @{friend.username}
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {friend.is_online ? 'Online' : 'Offline'}
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
+            {friends.map((friend) => (
+              <DropdownMenuItem 
+                key={friend.id}
+                className="flex items-center space-x-3 px-3 py-2 hover:bg-gray-800 cursor-pointer"
+                onClick={() => {
+                  console.log('Clicked friend:', friend.display_name)
+                }}
+              >
+                <div className="relative">
+                  <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-black font-bold text-sm">
+                    {friend.display_name.charAt(0).toUpperCase()}
+                  </div>
+                  <Circle 
+                    className={`absolute -bottom-1 -right-1 h-3 w-3 ${
+                      friend.is_online 
+                        ? 'text-green-500 fill-green-500' 
+                        : 'text-gray-500 fill-gray-500'
+                    }`} 
+                  />
                 </div>
-              )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate">
+                    {friend.display_name}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">
+                    @{friend.username}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {friend.is_online ? 'Online' : 'Offline'}
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </div>
+        )}
             </>
           )}
 

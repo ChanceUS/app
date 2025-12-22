@@ -370,12 +370,12 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           /*
           try {
             const result = await supabase
-              .from('match_history')
-              .select('*')
-              .eq('match_id', matchId)
-              .in('action_type', ['rematch_requested', 'rematch_accepted', 'rematch_rejected'])
-              .order('created_at', { ascending: false })
-            
+            .from('match_history')
+            .select('*')
+            .eq('match_id', matchId)
+            .in('action_type', ['rematch_requested', 'rematch_accepted', 'rematch_rejected'])
+            .order('created_at', { ascending: false })
+          
             rematchHistory = result.data
             rematchError = result.error
           } catch (err) {
@@ -817,50 +817,50 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
             return
           } else {
             // Game continues - save move and switch player
-            const { error } = await supabase
-              .from('matches')
-              .update({
-                game_data: {
-                  board: newBoard,
-                  currentPlayer: nextPlayer, // Switch for next turn
-                  winner: null
-                }
-              })
-              .eq('id', matchId)
-            
-            if (error) {
-              console.error('Failed to save move to database:', error)
-              // Revert local change if database save failed
-              setBoard(currentBoard)
-              boardRef.current = currentBoard
-              isProcessingMoveRef.current = false
-              return
-            }
-            
-            console.log('✅ Move saved to database for opponent sync')
-            
-            // Also save to match history for move tracking
-            const { error: historyError } = await supabase
-              .from('match_history')
-              .insert({
-                match_id: matchId,
-                user_id: currentUserId,
-                action_type: 'move_made',
-                action_data: {
-                  board: newBoard,
-                  column: column,
-                  player: currentPlayer,
-                  move: column,
-                  timestamp: new Date().toISOString()
-                }
-              })
-            
-            if (historyError) {
-              console.error('Failed to save move to history:', historyError)
-            } else {
-              console.log('✅ Move saved to match history')
-              // Reload move history to include the new move
-              loadMoveHistoryFromDB()
+          const { error } = await supabase
+            .from('matches')
+            .update({
+              game_data: {
+                board: newBoard,
+                currentPlayer: nextPlayer, // Switch for next turn
+                winner: null
+              }
+            })
+            .eq('id', matchId)
+          
+          if (error) {
+            console.error('Failed to save move to database:', error)
+            // Revert local change if database save failed
+            setBoard(currentBoard)
+            boardRef.current = currentBoard
+            isProcessingMoveRef.current = false
+            return
+          }
+          
+          console.log('✅ Move saved to database for opponent sync')
+          
+          // Also save to match history for move tracking
+          const { error: historyError } = await supabase
+            .from('match_history')
+            .insert({
+              match_id: matchId,
+              user_id: currentUserId,
+              action_type: 'move_made',
+              action_data: {
+                board: newBoard,
+                column: column,
+                player: currentPlayer,
+                move: column,
+                timestamp: new Date().toISOString()
+              }
+            })
+          
+          if (historyError) {
+            console.error('Failed to save move to history:', historyError)
+          } else {
+            console.log('✅ Move saved to match history')
+            // Reload move history to include the new move
+            loadMoveHistoryFromDB()
             }
             
             // Switch players
@@ -1064,8 +1064,8 @@ export default function SimpleConnectFour({ matchId, betAmount, status, currentU
           .from('users')
           .select('tokens')
           .eq('id', player1Id)
-          .single()
-        
+        .single()
+      
         const { data: player2Data, error: player2Error } = await supabase
           .from('users')
           .select('tokens')

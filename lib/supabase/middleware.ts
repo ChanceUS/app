@@ -35,24 +35,24 @@ export async function updateSession(request: NextRequest) {
   try {
     // Only check session for protected routes
     if (isProtectedRoute) {
-      // Create a Supabase client configured to use cookies
-      const supabase = createMiddlewareClient({ req: request, res })
+    // Create a Supabase client configured to use cookies
+    const supabase = createMiddlewareClient({ req: request, res })
 
-      // Refresh session if expired - required for Server Components
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    // Refresh session if expired - required for Server Components
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-      console.log("🔍 DEBUG: Middleware session check:", { 
-        path: request.nextUrl.pathname, 
-        hasSession: !!session,
-        userId: session?.user?.id 
-      })
+    console.log("🔍 DEBUG: Middleware session check:", { 
+      path: request.nextUrl.pathname, 
+      hasSession: !!session,
+      userId: session?.user?.id 
+    })
 
-      // Redirect unauthenticated users from protected routes
+    // Redirect unauthenticated users from protected routes
       if (!session) {
         const redirectUrl = `/auth/login?redirect=${encodeURIComponent(request.nextUrl.pathname)}`
-        console.log("🔍 DEBUG: Redirecting unauthenticated user from protected route to login")
+      console.log("🔍 DEBUG: Redirecting unauthenticated user from protected route to login")
         return NextResponse.redirect(new URL(redirectUrl, request.url))
       }
     }

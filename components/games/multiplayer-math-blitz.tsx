@@ -1544,8 +1544,8 @@ export default function MultiplayerMathBlitz({
                <XCircle className="h-5 w-5 sm:h-8 sm:w-8 text-black" />}
             </div>
             <CardTitle className="text-xl sm:text-3xl font-bold text-white">
-              {isWinner ? 'You Won!' : isDraw ? "It's a Draw!" : 'You Lost!'}
-            </CardTitle>
+            {isWinner ? 'You Won!' : isDraw ? "It's a Draw!" : 'You Lost!'}
+          </CardTitle>
           </div>
           <p className="text-sm sm:text-base text-gray-400">
             {isWinner ? 'Congratulations on your victory!' : 
@@ -2023,9 +2023,9 @@ export default function MultiplayerMathBlitz({
                         Request Again
                       </button>
                     </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
             
             <div className="grid grid-cols-2 gap-6">
               <div className="text-center p-4 bg-gray-800 rounded-lg">
@@ -2047,7 +2047,7 @@ export default function MultiplayerMathBlitz({
                 </div>
               </div>
             </div>
-          </CardContent>
+            </CardContent>
           </Card>
         )
       } else {

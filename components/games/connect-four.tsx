@@ -214,34 +214,49 @@ export default function ConnectFour({
       </CardHeader>
       <CardContent>
         <div className="space-y-3 sm:space-y-2">
-          {/* Column buttons */}
-          <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-4">
-            {useMemo(() => Array.from({ length: 7 }, (_, col) => {
-              const isDisabled = !isActive || !isMyTurn || gameWinner !== null || isProcessingMove
-              return (
-                <Button
-                  key={col}
-                  onClick={() => handleColumnClick(col)}
-                  disabled={isDisabled}
-                  className="h-10 sm:h-8 bg-gray-800 hover:bg-gray-700 text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-0"
-                >
-                  ↓
-                </Button>
-              )
-            }), [isActive, isMyTurn, gameWinner, isProcessingMove, handleColumnClick])}
-          </div>
-
-          {/* Game board */}
+          {/* Game board container with aligned arrows */}
           <div className="bg-blue-900/30 p-3 sm:p-4 rounded-lg">
-            <div className="grid grid-cols-7 gap-1 sm:gap-1 mx-auto max-w-fit">
-              {board.map((row, rowIndex) =>
-                row.map((cell, colIndex) => (
+            {/* Column buttons - aligned with board columns, full width clickable */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1 mb-2 mx-auto max-w-fit" style={{ width: 'fit-content' }}>
+              {useMemo(() => Array.from({ length: 7 }, (_, col) => {
+                const isDisabled = !isActive || !isMyTurn || gameWinner !== null || isProcessingMove
+                return (
+                  <button
+                    key={col}
+                    onClick={() => handleColumnClick(col)}
+                    disabled={isDisabled}
+                    className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-800 hover:bg-gray-700 text-white text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center rounded-t-md transition-colors"
+                    type="button"
+                  >
+                    ↓
+                  </button>
+                )
+              }), [isActive, isMyTurn, gameWinner, isProcessingMove, handleColumnClick])}
+            </div>
+
+            {/* Game board - aligned with arrows above, clickable columns */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1 mx-auto max-w-fit" style={{ width: 'fit-content' }}>
+              {Array.from({ length: 7 }, (_, colIndex) => {
+                const isDisabled = !isActive || !isMyTurn || gameWinner !== null || isProcessingMove
+                return (
                   <div
-                    key={`${rowIndex}-${colIndex}`}
-                    className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(cell)} w-10 h-10 sm:w-12 sm:h-12`}
-                  />
-                )),
-              )}
+                    key={`col-${colIndex}`}
+                    onClick={!isDisabled ? () => handleColumnClick(colIndex) : undefined}
+                    className={`flex flex-col gap-1 sm:gap-1 ${
+                      !isDisabled ? 'cursor-pointer' : ''
+                    }`}
+                  >
+                    {board.map((row, rowIndex) => (
+                      <div
+                        key={`${rowIndex}-${colIndex}`}
+                        className={`aspect-square rounded-full border-2 border-gray-600 transition-all duration-300 ${getCellColor(row[colIndex])} w-10 h-10 sm:w-12 sm:h-12 ${
+                          !isDisabled ? 'hover:border-gray-400' : ''
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )
+              })}
             </div>
           </div>
 

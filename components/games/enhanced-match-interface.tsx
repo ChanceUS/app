@@ -1111,12 +1111,12 @@ export default function EnhancedMatchInterface({
           // IMPORTANT: Only create transaction record - the database trigger will automatically update the user's token balance
           // This prevents double-payout (direct update + trigger update)
           const { error: transactionError } = await supabase.from('transactions').insert({
-            user_id: winnerId,
-            match_id: match.id,
-            amount: winnings,
-            type: 'win',
-            description: `Won match - ${winnings} tokens`
-          })
+                user_id: winnerId,
+                match_id: match.id,
+                amount: winnings,
+                type: 'win',
+                description: `Won match - ${winnings} tokens`
+              })
           
           if (transactionError) {
             console.error('❌ Failed to create winner transaction:', transactionError)
@@ -1493,7 +1493,7 @@ export default function EnhancedMatchInterface({
       <CardHeader>
         {/* Match Title and Info */}
         <div className="mb-4 pb-4 border-b border-gray-700">
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-white text-xl flex items-center">
                 <Trophy className="mr-2 h-5 w-5 text-orange-400" />
@@ -1531,11 +1531,11 @@ export default function EnhancedMatchInterface({
             <Users className="mr-2 h-4 w-4 text-orange-400" />
             Match Status
           </CardTitle>
-          <div className="flex items-center space-x-2">
+                 <div className="flex items-center space-x-2">
             <Badge className="bg-blue-500/20 text-blue-400 text-xs">
-              <div className="w-2 h-2 rounded-full mr-2 bg-blue-400" />
-              Polling
-            </Badge>
+                     <div className="w-2 h-2 rounded-full mr-2 bg-blue-400" />
+                     Polling
+                   </Badge>
             <Badge className="bg-orange-500/20 text-orange-400 text-xs">
               {match.bet_amount} tokens
             </Badge>

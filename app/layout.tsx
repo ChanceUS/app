@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${poppins.variable} ${openSans.variable} ${jetbrainsMono.variable}`}
+      className={`${poppins.variable} ${openSans.variable} ${jetbrainsMono.variable} bg-gray-950`}
       suppressHydrationWarning
     >
       <head>
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
         `}</style>
       </head>
-      <body className="font-sans antialiased" suppressHydrationWarning>
+      <body className="font-sans antialiased bg-gray-950" suppressHydrationWarning>
         <ClientInit /> {/* ensures window.supabase is set */}
         {children}
         <Toaster />

@@ -4,6 +4,7 @@ import Header from "@/components/navigation/header"
 import CreateMatchForm from "@/components/games/create-match-form"
 import MathBlitz from "@/components/games/math-blitz"
 import TriviaChallenge from "@/components/games/trivia-challenge"
+import ConnectFourPreview from "@/components/games/connect-four-preview"
 
 interface CreateMatchPageProps {
   params: {
@@ -31,8 +32,8 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
   
   if (testError) {
     console.error("❌ Database connection failed:", testError)
-    return (
-      <div className="min-h-screen bg-black">
+      return (
+      <div className="min-h-screen bg-gray-950">
         <Header user={user} />
         <div className="flex items-center justify-center p-4 pt-20">
           <div className="text-center">
@@ -106,10 +107,13 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen h-full bg-gray-950 relative">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
+      
       <Header user={user} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
         {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Create {game.name} Match</h1>
@@ -137,18 +141,38 @@ export default async function CreateMatchPage({ params }: CreateMatchPageProps) 
                 </div>
               )}
               
-              {/* Show other games when implemented */}
-              {game.name === "4 In a Row" && (
-                <div className="text-center py-12">
-                  <div className="text-6xl mb-4">🔴</div>
-                  <h3 className="text-white text-lg font-semibold">4 In a Row</h3>
-                  <p className="text-gray-400">Game preview coming soon</p>
-                </div>
-              )}
+              {/* Show Connect 4 for 4 In a Row game - check multiple name variations */}
+              {(() => {
+                const gameNameLower = game.name?.toLowerCase() || ""
+                const isConnect4 = gameNameLower.includes("row") || 
+                                  gameNameLower.includes("connect") ||
+                                  game.name === "4 In a Row" ||
+                                  game.name === "Four in a Row" ||
+                                  game.name === "Connect 4"
+                
+                return isConnect4 ? (
+                  <div className="scale-90 origin-top">
+                    <ConnectFourPreview />
+                  </div>
+                ) : null
+              })()}
               
               {game.name === "Trivia Challenge" && (
                 <div className="scale-90 origin-top">
                   <TriviaChallenge />
+                </div>
+              )}
+              
+              {/* Debug: Show game name if no preview matches */}
+              {game.name !== "Math Blitz" && 
+               game.name !== "Trivia Challenge" && 
+               !(game.name?.toLowerCase().includes("row") || 
+                 game.name?.toLowerCase().includes("connect")) && (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🎮</div>
+                  <h3 className="text-white text-lg font-semibold">{game.name}</h3>
+                  <p className="text-gray-400">Game preview for: {game.name}</p>
+                  <p className="text-gray-500 text-xs mt-2">Name check: {JSON.stringify(game.name)}</p>
                 </div>
               )}
             </div>

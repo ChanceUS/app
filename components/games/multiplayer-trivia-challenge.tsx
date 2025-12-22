@@ -289,59 +289,59 @@ export default function MultiplayerTriviaChallenge({
             // Don't use this invalid state - let it fall through to initialize new questions
             // Continue to initialization block below (don't return)
           } else {
-            // Update state - always use the database state as source of truth
-            // But preserve local state if it has more recent answers (to prevent race conditions)
-            setGameState(prevState => {
-              if (!prevState) {
-                // First load - use database state
-                const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-                setMyCurrentQuestionIndex(myAnswers.length)
-                return loadedState
-              }
+          // Update state - always use the database state as source of truth
+          // But preserve local state if it has more recent answers (to prevent race conditions)
+          setGameState(prevState => {
+            if (!prevState) {
+              // First load - use database state
+              const myAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+              setMyCurrentQuestionIndex(myAnswers.length)
+              return loadedState
+            }
             
-              // Check if database state has more progress than local state
-              const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
-              const localMyAnswers = isPlayer1 ? prevState.player1Answers : prevState.player2Answers
-              
-              // Use database state if it has more answers (more up-to-date)
-              if (dbMyAnswers.length > localMyAnswers.length) {
-                console.log('✅ Database has more progress, updating state. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
-                setMyCurrentQuestionIndex(dbMyAnswers.length)
-                return loadedState
-              }
-              
-              // If local state has more answers, keep it (it's more recent)
-              if (localMyAnswers.length > dbMyAnswers.length) {
-                console.log('⚠️ Local state has more progress, keeping local. Local:', localMyAnswers.length, 'DB:', dbMyAnswers.length)
-                return prevState
-              }
-              
-              // Same progress - check other fields
-              const hasOtherChanges = 
-                loadedState.player1Score !== prevState.player1Score ||
-                loadedState.player2Score !== prevState.player2Score ||
-                loadedState.player1Finished !== prevState.player1Finished ||
-                loadedState.player2Finished !== prevState.player2Finished
-              
-              if (hasOtherChanges) {
-                // Merge: keep local answers if same length, but update other fields
-                const mergedState = {
-                  ...loadedState,
-                  player1Answers: prevState.player1Answers.length >= loadedState.player1Answers.length 
-                    ? prevState.player1Answers 
-                    : loadedState.player1Answers,
-                  player2Answers: prevState.player2Answers.length >= loadedState.player2Answers.length 
-                    ? prevState.player2Answers 
-                    : loadedState.player2Answers
-                }
-                const myAnswers = isPlayer1 ? mergedState.player1Answers : mergedState.player2Answers
-                setMyCurrentQuestionIndex(myAnswers.length)
-                return mergedState
-              }
-              
-              // No changes - keep previous state
+            // Check if database state has more progress than local state
+            const dbMyAnswers = isPlayer1 ? loadedState.player1Answers : loadedState.player2Answers
+            const localMyAnswers = isPlayer1 ? prevState.player1Answers : prevState.player2Answers
+            
+            // Use database state if it has more answers (more up-to-date)
+            if (dbMyAnswers.length > localMyAnswers.length) {
+              console.log('✅ Database has more progress, updating state. DB:', dbMyAnswers.length, 'Local:', localMyAnswers.length)
+              setMyCurrentQuestionIndex(dbMyAnswers.length)
+              return loadedState
+            }
+            
+            // If local state has more answers, keep it (it's more recent)
+            if (localMyAnswers.length > dbMyAnswers.length) {
+              console.log('⚠️ Local state has more progress, keeping local. Local:', localMyAnswers.length, 'DB:', dbMyAnswers.length)
               return prevState
-            })
+            }
+            
+            // Same progress - check other fields
+            const hasOtherChanges = 
+              loadedState.player1Score !== prevState.player1Score ||
+              loadedState.player2Score !== prevState.player2Score ||
+              loadedState.player1Finished !== prevState.player1Finished ||
+              loadedState.player2Finished !== prevState.player2Finished
+            
+            if (hasOtherChanges) {
+              // Merge: keep local answers if same length, but update other fields
+              const mergedState = {
+                ...loadedState,
+                player1Answers: prevState.player1Answers.length >= loadedState.player1Answers.length 
+                  ? prevState.player1Answers 
+                  : loadedState.player1Answers,
+                player2Answers: prevState.player2Answers.length >= loadedState.player2Answers.length 
+                  ? prevState.player2Answers 
+                  : loadedState.player2Answers
+              }
+              const myAnswers = isPlayer1 ? mergedState.player1Answers : mergedState.player2Answers
+              setMyCurrentQuestionIndex(myAnswers.length)
+              return mergedState
+            }
+            
+            // No changes - keep previous state
+            return prevState
+          })
           }
           
           // Check if both finished - always check for finalResult
@@ -414,19 +414,19 @@ export default function MultiplayerTriviaChallenge({
           try {
             const { generateSynchronizedTriviaQuestionsSync } = await import('@/lib/game-logic')
             const questions = generateSynchronizedTriviaQuestionsSync(matchId, categoryToUse, TOTAL_QUESTIONS)
-            
-            const initialState: MultiplayerTriviaState = {
-              questions,
-              currentQuestionIndex: 0,
-              player1Score: 0,
-              player2Score: 0,
-              player1Answers: [],
-              player2Answers: [],
-              player1Finished: false,
-              player2Finished: false,
-              gameStartTime: Date.now()
-            }
-            
+          
+          const initialState: MultiplayerTriviaState = {
+            questions,
+            currentQuestionIndex: 0,
+            player1Score: 0,
+            player2Score: 0,
+            player1Answers: [],
+            player2Answers: [],
+            player1Finished: false,
+            player2Finished: false,
+            gameStartTime: Date.now()
+          }
+          
             console.log(`✅ Initialized trivia game with ${initialState.questions.length} questions`)
             console.log(`📋 Questions:`, initialState.questions.map((q, i) => `${i + 1}. ${q.question.substring(0, 50)}... (${q.category})`))
             
@@ -436,8 +436,8 @@ export default function MultiplayerTriviaChallenge({
             }
             
             // Set state immediately so component doesn't show loading
-            setGameState(initialState)
-            setMyCurrentQuestionIndex(0)
+          setGameState(initialState)
+          setMyCurrentQuestionIndex(0)
             setMatchReady(true)
             setBothPlayersReady(true)
             
