@@ -69,7 +69,7 @@ export default function SignUpForm() {
   const [state, formAction] = useActionState(signUp, null)
 
   return (
-    <Card className="w-full max-w-md bg-black border-gray-800">
+    <Card className="w-full max-w-md bg-gray-900/90 border-gray-700/50 backdrop-blur-sm">
       <CardHeader className="text-center space-y-4">
         <div className="flex justify-center">
           <img src="/chanceus-eagle.png" alt="ChanceUS" className="h-16" />
@@ -86,7 +86,7 @@ export default function SignUpForm() {
             <span className="w-full border-t border-gray-700" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-black px-2 text-gray-400">Or continue with email</span>
+            <span className="bg-gray-900/90 px-2 text-gray-400">Or continue with email</span>
           </div>
         </div>
 

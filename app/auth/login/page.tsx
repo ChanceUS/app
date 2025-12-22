@@ -1,6 +1,7 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import LoginForm from "@/components/login-form"
+import Header from "@/components/navigation/header"
 
 interface LoginPageProps {
   searchParams: Promise<{ redirect?: string }>
@@ -33,11 +34,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-950 relative">
+    <div className="min-h-screen bg-gray-950 relative">
+      <Header />
+      
       {/* Subtle gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-950/20 via-purple-950/10 to-transparent pointer-events-none"></div>
       
-      <div className="relative z-10 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center relative z-10 px-4 py-12 sm:px-6 lg:px-8">
         <LoginForm redirectUrl={params.redirect} />
       </div>
     </div>
