@@ -241,7 +241,7 @@ export default function MatchmakingInterface({
   // When match is found, show loading while redirecting
   if (status === 'found_live' && matchId) {
     return (
-      <Card className="w-full max-w-2xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-2xl mx-auto bg-gray-900/50 border-gray-700/50 backdrop-blur-sm">
         <CardContent className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Match found! Redirecting to game...</p>
@@ -274,7 +274,7 @@ export default function MatchmakingInterface({
 
   if (status === 'completed') {
     return (
-      <Card className="w-full max-w-2xl mx-auto bg-black border-gray-800">
+      <Card className="w-full max-w-2xl mx-auto bg-gray-900/50 border-gray-700/50 backdrop-blur-sm">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-green-500 rounded-full">
@@ -319,7 +319,7 @@ export default function MatchmakingInterface({
   }
 
   return (
-    <Card className="w-full max-w-2xl mx-auto bg-black border-gray-800">
+    <Card className="w-full max-w-2xl mx-auto bg-gray-900/50 border-gray-700/50 backdrop-blur-sm">
       <CardHeader className="text-center">
         <div className="flex justify-center mb-4">
           <div className="p-3 bg-orange-500 rounded-full">
